@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "personal-finance-tracker-backend"
+version = "1.0.0"
+description = "Backend API for Personal Finance Tracker"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+packages = [{include = "app"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+fastapi = "0.109.0"
+uvicorn = {extras = ["standard"], version = "0.27.0"}
+sqlalchemy = "2.0.25"
+pandas = "2.1.4"
+openpyxl = "3.1.2"
+python-dateutil = "2.8.2"
+pydantic = "2.5.3"
+pydantic-settings = "2.1.0"
+
+[tool.poetry.group.dev.dependencies]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
