@@ -6,6 +6,8 @@ from fastapi.responses import FileResponse
 import os
 
 from .database import engine, Base
+# Import models to register them with Base.metadata
+from . import models  # noqa: F401
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
