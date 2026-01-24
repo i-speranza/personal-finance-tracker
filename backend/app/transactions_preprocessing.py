@@ -6,6 +6,8 @@ from datetime import date, datetime
 from abc import ABC, abstractmethod
 import logging
 
+from .file_reader import FileReader
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,14 +20,18 @@ class StandardizedTransaction:
         date: date,
         amount: float,
         description: Optional[str] = None,
+        details: Optional[str] = None,
         category: Optional[str] = None,
+        transaction_type: Optional[str] = None,
         is_special: bool = False
     ):
         self.bank_name = bank_name
         self.date = date
         self.amount = amount
         self.description = description
+        self.details = details
         self.category = category
+        self.transaction_type = transaction_type
         self.is_special = is_special
     
     def to_dict(self) -> Dict[str, Any]:
@@ -35,13 +41,61 @@ class StandardizedTransaction:
             "date": self.date,
             "amount": self.amount,
             "description": self.description,
+            "details": self.details,
             "category": self.category,
+            "transaction_type": self.transaction_type,
             "is_special": self.is_special
         }
 
 
-class BankParser(ABC):
+def dataframe_to_list(df: pd.DataFrame) -> List[StandardizedTransaction]:
+    """
+    Convert a DataFrame with standardized transaction columns to a list of StandardizedTransaction objects.
+    
+    Args:
+        df: DataFrame with columns: bank_name, date, amount, description, details, 
+            category, transaction_type, is_special 
+            
+    Returns:
+        List of StandardizedTransaction objects
+    """
+    transactions = []
+    
+    for _, row in df.iterrows():
+        try:
+            # Extract date - handle both date and datetime types
+            trans_date = row['date']
+            if isinstance(trans_date, pd.Timestamp):
+                trans_date = trans_date.date()
+            elif isinstance(trans_date, datetime):
+                trans_date = trans_date.date()
+            elif not isinstance(trans_date, date):
+                # Try to parse if it's a string
+                trans_date = pd.to_datetime(trans_date).date()
+            
+            transaction = StandardizedTransaction(
+                bank_name=str(row['bank_name']) if pd.notna(row.get('bank_name')) else None,
+                date=trans_date,
+                amount=float(row['amount']) if pd.notna(row.get('amount')) else 0.0,
+                description=str(row['description']) if pd.notna(row.get('description')) else None,
+                details=str(row['details']) if pd.notna(row.get('details')) else None,
+                category=str(row['category']) if pd.notna(row.get('category')) else None,
+                transaction_type=str(row['transaction_type']) if pd.notna(row.get('transaction_type')) else None,
+                is_special=bool(row['is_special']) if pd.notna(row.get('is_special')) else False
+            )
+            transactions.append(transaction)
+        except Exception as e:
+            logger.warning(f"Skipping row due to error in dataframe_to_list: {e}")
+            continue
+    
+    return transactions
+
+
+class BankTransactionsParser(ABC):
     """Abstract base class for bank-specific parsers."""
+    def __init__(self, skiprows: Optional[int] = None, skipfooter: Optional[int] = None):
+        self.skiprows = skiprows
+        self.skipfooter = skipfooter
     
     @abstractmethod
     def get_bank_name(self) -> str:
@@ -63,16 +117,24 @@ class BankParser(ABC):
         pass
     
     @abstractmethod
-    def parse(self, df: pd.DataFrame, filename: Optional[str] = None) -> List[StandardizedTransaction]:
+    def parse(self, df: pd.DataFrame, filename: Optional[str] = None) -> pd.DataFrame:
         """
-        Parse the DataFrame and return standardized transactions.
+        Parse the DataFrame and return standardized transactions as a DataFrame.
         
         Args:
             df: The DataFrame to parse
             filename: Optional filename for additional context
             
         Returns:
-            List of StandardizedTransaction objects
+            DataFrame with standardized transaction columns:
+            - bank_name: str
+            - date: date/datetime
+            - amount: float
+            - description: str (nullable)
+            - details: str (nullable)
+            - category: str (nullable)
+            - transaction_type: str (nullable)
+            - is_special: bool
         """
         pass
     
@@ -148,43 +210,18 @@ class BankParser(ABC):
             raise ValueError(f"Could not convert to float: {amount_value} - {e}")
 
 
-class ParserRegistry:
+class TransactionsParserRegistry:
     """Registry for bank-specific parsers."""
     
     def __init__(self):
-        self._parsers: List[BankParser] = []
+        self._parsers: List[BankTransactionsParser] = []
     
-    def register(self, parser: BankParser):
+    def register(self, parser: BankTransactionsParser):
         """Register a bank parser."""
-        if not isinstance(parser, BankParser):
-            raise ValueError("Parser must be an instance of BankParser")
         self._parsers.append(parser)
         logger.info(f"Registered parser for bank: {parser.get_bank_name()}")
     
-    def find_parser(self, df: pd.DataFrame, filename: Optional[str] = None) -> Optional[BankParser]:
-        """
-        Find the appropriate parser for the given DataFrame.
-        
-        Args:
-            df: The DataFrame to parse
-            filename: Optional filename for additional context
-            
-        Returns:
-            BankParser instance if found, None otherwise
-        """
-        for parser in self._parsers:
-            try:
-                if parser.can_parse(df, filename):
-                    logger.info(f"Found parser for bank: {parser.get_bank_name()}")
-                    return parser
-            except Exception as e:
-                logger.warning(f"Error checking parser {parser.get_bank_name()}: {e}")
-                continue
-        
-        logger.warning("No suitable parser found for the file")
-        return None
-    
-    def get_parser_by_bank_name(self, bank_name: str) -> Optional[BankParser]:
+    def get_parser_by_bank_name(self, bank_name: str) -> Optional[BankTransactionsParser]:
         """Get parser by bank name."""
         for parser in self._parsers:
             if parser.get_bank_name().lower() == bank_name.lower():
@@ -193,160 +230,100 @@ class ParserRegistry:
 
 
 # Global parser registry instance
-_parser_registry = ParserRegistry()
+_transactions_parser_registry = TransactionsParserRegistry()
 
 
-def register_parser(parser: BankParser):
+def register_transactions_parser(parser: BankTransactionsParser):
     """Register a bank parser in the global registry."""
-    _parser_registry.register(parser)
+    _transactions_parser_registry.register(parser)
 
 
-def get_parser_registry() -> ParserRegistry:
+def get_transactions_parser_registry() -> TransactionsParserRegistry:
     """Get the global parser registry."""
-    return _parser_registry
+    return _transactions_parser_registry
 
 
-class FileParser:
+class TransactionsFileParser:
     """Main file parser that handles file reading and routing to bank parsers."""
     
-    def __init__(self, parser_registry: Optional[ParserRegistry] = None):
-        self.registry = parser_registry or _parser_registry
-    
-    def detect_file_type(self, file_path: Path) -> str:
-        """
-        Detect file type from extension.
-        
-        Args:
-            file_path: Path to the file
-            
-        Returns:
-            File type: 'excel', 'csv', or raises ValueError
-        """
-        suffix = file_path.suffix.lower()
-        if suffix in ['.xlsx', '.xls']:
-            return 'excel'
-        elif suffix == '.csv':
-            return 'csv'
-        else:
-            raise ValueError(f"Unsupported file type: {suffix}. Supported: .xlsx, .xls, .csv")
-    
-    def read_file(self, file_path: Path) -> pd.DataFrame:
-        """
-        Read file into pandas DataFrame.
-        
-        Args:
-            file_path: Path to the file
-            
-        Returns:
-            pandas DataFrame
-        """
-        file_type = self.detect_file_type(file_path)
-        
-        try:
-            if file_type == 'excel':
-                # Try reading all sheets, return first non-empty one
-                excel_file = pd.ExcelFile(file_path)
-                for sheet_name in excel_file.sheet_names:
-                    df = pd.read_excel(file_path, sheet_name=sheet_name)
-                    if not df.empty:
-                        logger.info(f"Read sheet '{sheet_name}' from {file_path.name}")
-                        return df
-                raise ValueError("No data found in Excel file")
-            else:  # CSV
-                # Try different encodings
-                encodings = ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']
-                for encoding in encodings:
-                    try:
-                        df = pd.read_csv(file_path, encoding=encoding)
-                        logger.info(f"Read CSV file {file_path.name} with encoding {encoding}")
-                        return df
-                    except UnicodeDecodeError:
-                        continue
-                raise ValueError(f"Could not read CSV file with any supported encoding: {file_path}")
-        except Exception as e:
-            logger.error(f"Error reading file {file_path}: {e}")
-            raise
+    def __init__(self, parser_registry: Optional[TransactionsParserRegistry] = None):
+        self.registry = parser_registry or _transactions_parser_registry
+        self.file_reader = FileReader()
     
     def parse_file(
         self,
         file_path: Path,
-        bank_name: Optional[str] = None
-    ) -> List[StandardizedTransaction]:
+        bank_name: str
+    ) -> pd.DataFrame:
         """
-        Parse a file and return standardized transactions.
+        Parse a file and return standardized transactions as a DataFrame.
         
         Args:
             file_path: Path to the file to parse
-            bank_name: Optional bank name to force a specific parser
+            bank_name: Bank name to force a specific parser
             
         Returns:
-            List of StandardizedTransaction objects
+            DataFrame with standardized transaction columns:
+            - bank_name: str
+            - date: date/datetime
+            - amount: float
+            - description: str (nullable)
+            - details: str (nullable)
+            - category: str (nullable)
+            - transaction_type: str (nullable)
+            - is_special: bool
             
         Raises:
             ValueError: If file cannot be parsed or no suitable parser found
-        """
-        # Read file
-        df = self.read_file(file_path)
-        
-        if df.empty:
-            raise ValueError("File is empty or contains no data")
-        
+        """        
         # Find appropriate parser
         if bank_name:
             parser = self.registry.get_parser_by_bank_name(bank_name)
             if not parser:
                 raise ValueError(f"No parser registered for bank: {bank_name}")
         else:
-            parser = self.registry.find_parser(df, filename=file_path.name)
-            if not parser:
-                raise ValueError(
-                    f"No suitable parser found for file: {file_path.name}. "
-                    "Please register a parser for this bank format."
-                )
+            raise ValueError(
+                f"No suitable parser found for file: {file_path.name}. "
+                "Please register a parser for this bank format."
+            )
         
+        # Read file
+        df = self.file_reader.read_file(file_path, skiprows=parser.skiprows, skipfooter=parser.skipfooter)
+        
+        if df.empty:
+            raise ValueError("File is empty or contains no data")
+
         # Parse using the selected parser
         try:
-            transactions = parser.parse(df, filename=file_path.name)
-            logger.info(f"Parsed {len(transactions)} transactions from {file_path.name}")
-            return transactions
+            result_df = parser.parse(df)
+            logger.info(f"Parsed {len(result_df)} transactions from {file_path.name}")
         except Exception as e:
             logger.error(f"Error parsing file {file_path.name} with parser {parser.get_bank_name()}: {e}")
             raise
 
+        # Check if there are duplicate transactions, if so raise a warning displaying the duplicate transactions and sum the amounts
+        if result_df.duplicated().any():
+            duplicate_transactions = result_df[result_df.duplicated(keep=False)]
+            logger.warning(f"Duplicate transactions found: \n{duplicate_transactions}\n. Summing the amounts.")
+            result_df = result_df.groupby([c for c in result_df.columns if c not in 'amount'])['amount'].sum().reset_index()
+
+        return result_df
+
 
 # Example bank parser implementation (for testing and as a template)
-class ExampleBankParser(BankParser):
+class ExampleBankTransactionsParser(BankTransactionsParser):
     """
-    Example bank parser implementation.
-    
-    This serves as a template for creating bank-specific parsers.
-    Developers should create similar parsers for their banks.
+    Example bank transactions parser implementation.
     """
     
     def get_bank_name(self) -> str:
-        return "example_bank"
+        return "Example Bank"
     
     def can_parse(self, df: pd.DataFrame, filename: Optional[str] = None) -> bool:
-        """
-        Check if this is an Example Bank file.
-        
-        Example: Check for specific column names or patterns.
-        """
-        # Example: Check for specific columns
-        required_columns = ["date", "amount", "description"]
-        return all(col.lower() in [c.lower() for c in df.columns] for col in required_columns)
+        return True
     
-    def parse(self, df: pd.DataFrame, filename: Optional[str] = None) -> List[StandardizedTransaction]:
-        """
-        Parse Example Bank format.
-        
-        Expected columns:
-        - date: Transaction date
-        - amount: Transaction amount
-        - description: Transaction description
-        - category: Optional category
-        """
-        transactions = []
+    def parse(self, df: pd.DataFrame) -> pd.DataFrame:
+        transactions_data = []
         
         # Clean column names (lowercase, strip whitespace)
         df.columns = df.columns.str.lower().str.strip()
@@ -366,20 +343,23 @@ class ExampleBankParser(BankParser):
                 description = str(row[description_col]) if pd.notna(row.get(description_col)) else None
                 category = str(row[category_col]) if pd.notna(row.get(category_col)) else None
                 
-                transaction = StandardizedTransaction(
-                    bank_name=self.get_bank_name(),
-                    date=trans_date,
-                    amount=amount,
-                    description=description,
-                    category=category,
-                    is_special=False  # Default, can be customized
-                )
-                transactions.append(transaction)
+                transactions_data.append({
+                    "bank_name": self.get_bank_name(),
+                    "date": trans_date,
+                    "amount": amount,
+                    "description": description,
+                    "details": None,
+                    "category": category,
+                    "transaction_type": None,
+                    "is_special": False
+                })
             except Exception as e:
                 logger.warning(f"Skipping row due to error: {e}")
                 continue
         
-        return transactions
+        # Convert to DataFrame
+        result_df = pd.DataFrame(transactions_data)
+        return result_df
 
 
 # Register example parser (can be removed or kept for testing)

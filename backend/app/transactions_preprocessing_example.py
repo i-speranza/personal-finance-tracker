@@ -1,5 +1,5 @@
 """
-Example usage of the preprocessing module.
+Example usage of the transactions preprocessing module.
 
 This file demonstrates how to:
 1. Create a custom bank parser
@@ -10,18 +10,17 @@ Developers should create their own parser classes following this pattern.
 """
 
 from pathlib import Path
-from .preprocessing import (
-    BankParser,
-    StandardizedTransaction,
-    FileParser,
-    register_parser,
-    get_parser_registry
+from .transactions_preprocessing import (
+    BankTransactionsParser,
+    TransactionsFileParser,
+    register_transactions_parser,
+    dataframe_to_list
 )
 import pandas as pd
 from typing import Optional
 
 
-class MyBankParser(BankParser):
+class MyBankParser(BankTransactionsParser):
     """
     Example custom bank parser.
     
@@ -44,7 +43,7 @@ class MyBankParser(BankParser):
         columns_lower = [col.lower() for col in df.columns]
         return "transaction_date" in columns_lower and "amount" in columns_lower
     
-    def parse(self, df: pd.DataFrame, filename: Optional[str] = None) -> list[StandardizedTransaction]:
+    def parse(self, df: pd.DataFrame, filename: Optional[str] = None) -> pd.DataFrame:
         """
         Parse your bank's specific format.
         
@@ -52,9 +51,9 @@ class MyBankParser(BankParser):
         1. Clean column names
         2. Map bank columns to standard fields
         3. Normalize dates and amounts
-        4. Create StandardizedTransaction objects
+        4. Create DataFrame with standardized transaction columns
         """
-        transactions = []
+        transactions_data = []
         
         # Clean column names
         df.columns = df.columns.str.lower().str.strip()
@@ -74,22 +73,25 @@ class MyBankParser(BankParser):
                 description = str(row[description_col]) if pd.notna(row.get(description_col)) else None
                 category = str(row[category_col]) if pd.notna(row.get(category_col)) else None
                 
-                # Create standardized transaction
-                transaction = StandardizedTransaction(
-                    bank_name=self.get_bank_name(),
-                    date=trans_date,
-                    amount=amount,
-                    description=description,
-                    category=category,
-                    is_special=False  # Set based on your logic
-                )
-                transactions.append(transaction)
+                transactions_data.append({
+                    "bank_name": self.get_bank_name(),
+                    "date": trans_date,
+                    "amount": amount,
+                    "description": description,
+                    "details": None,
+                    "category": category,
+                    "account_detais": None,
+                    "transaction_type": None,
+                    "is_special": False
+                })
             except Exception as e:
                 # Log and skip invalid rows
                 print(f"Skipping row: {e}")
                 continue
         
-        return transactions
+        # Convert to DataFrame
+        result_df = pd.DataFrame(transactions_data)
+        return result_df
 
 
 def example_usage():
@@ -97,18 +99,19 @@ def example_usage():
     
     # Step 1: Create and register your parser
     my_parser = MyBankParser()
-    register_parser(my_parser)
+    register_transactions_parser(my_parser)
     
     # Step 2: Create a FileParser instance
-    parser = FileParser()
+    parser = TransactionsFileParser()
     
     # Step 3: Parse a file
     file_path = Path("path/to/your/bank/statement.xlsx")
     try:
-        transactions = parser.parse_file(file_path)
-        print(f"Parsed {len(transactions)} transactions")
+        df = parser.parse_file(file_path)
+        print(f"Parsed {len(df)} transactions")
         
         # Step 4: Use the transactions (e.g., insert into database)
+        transactions = dataframe_to_list(df)
         for trans in transactions:
             print(f"{trans.date}: {trans.amount} - {trans.description}")
             # Insert into database using trans.to_dict()
@@ -120,13 +123,13 @@ def example_usage():
 def example_with_specific_bank():
     """Example of parsing with a specific bank parser."""
     
-    parser = FileParser()
+    parser = TransactionsFileParser()
     file_path = Path("path/to/your/bank/statement.csv")
     
     # Force a specific bank parser
     try:
-        transactions = parser.parse_file(file_path, bank_name="my_bank")
-        print(f"Parsed {len(transactions)} transactions")
+        df = parser.parse_file(file_path, bank_name="my_bank")
+        print(f"Parsed {len(df)} transactions")
     except ValueError as e:
         print(f"Error: {e}")
 
@@ -150,11 +153,11 @@ def example_testing_parser():
         print("Parser can handle this format!")
         
         # Test parsing
-        transactions = my_parser.parse(sample_data)
-        print(f"Parsed {len(transactions)} transactions")
+        df = my_parser.parse(sample_data)
+        print(f"Parsed {len(df)} transactions")
         
-        for trans in transactions:
-            print(f"{trans.date}: {trans.amount} - {trans.description}")
+        for _, row in df.iterrows():
+            print(f"{row['date']}: {row['amount']} - {row['description']}")
     else:
         print("Parser cannot handle this format")
 

@@ -24,7 +24,9 @@ class TransactionBase(BaseModel):
     date: date
     amount: float
     description: Optional[str] = None
+    details: Optional[str] = None
     category: Optional[str] = None
+    transaction_type: Optional[str] = None
     is_special: bool = False
 
 
@@ -40,6 +42,8 @@ class TransactionUpdate(BaseModel):
     amount: Optional[float] = None
     description: Optional[str] = None
     category: Optional[str] = None
+    details: Optional[str] = None
+    transaction_type: Optional[str] = None
     is_special: Optional[bool] = None
 
 

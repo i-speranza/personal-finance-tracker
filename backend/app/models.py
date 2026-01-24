@@ -39,6 +39,7 @@ class Transaction(Base):
     amount = Column(Float, nullable=False)
     description = Column(String)
     category = Column(String)
+    transaction_type = Column(String)
     is_special = Column(Boolean, default=False)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
