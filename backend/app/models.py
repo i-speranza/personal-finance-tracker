@@ -38,6 +38,7 @@ class Transaction(Base):
     date = Column(Date, nullable=False, index=True)
     amount = Column(Float, nullable=False)
     description = Column(String)
+    details = Column(String)
     category = Column(String)
     transaction_type = Column(String)
     is_special = Column(Boolean, default=False)
