@@ -14,6 +14,12 @@ from .transactions_preprocessing import (
     register_transactions_parser,
     dataframe_to_list
 )
+from .transaction_type_mappings import (
+    TRANSACTION_MAP_INTESA,
+    DEFAULT_TRANSACTION_TYPE_INTESA,
+    CARTA_PREPAGATA,
+    PAGAMENTO_CON_CARTA
+)
 import pandas as pd
 from typing import Optional
 
@@ -45,7 +51,7 @@ class IntesaParser(BankTransactionsParser):
         """
         Extract the description from the operation and details.
         """
-        if "Conto" in conto_o_carta:
+        if "Conto" in conto_o_carta or conto_o_carta.strip() == "":
             if operazione.strip().upper() == "ACCREDITO BEU CON CONTABILE":
                 return dettagli
             if "Addebito Diretto" in operazione:
@@ -53,13 +59,17 @@ class IntesaParser(BankTransactionsParser):
             if "Carta N." in dettagli:
                 return "Pagam. POS - " + operazione
             if "Bonifico Disposto A Favore Di" in operazione or "Bonifico Istantaneo Da Voi Disposto A Favore Di" in operazione:
-                # keep everthing in details after "Bonifico Da Voi Disposto A Favore Di"
-                return "Bonifico a " + dettagli.split("Bonifico Da Voi Disposto A Favore Di")[1].strip()
-            if "Bonifico Disposto Da" in operazione or "Bonifico Istantaneo Disposto Da":
+                # keep everything in details after "Bonifico Da Voi Disposto A Favore Di"
+                if "Bonifico Da Voi Disposto A Favore Di" in dettagli:
+                    return "Bonifico a " + dettagli.split("Bonifico Da Voi Disposto A Favore Di")[1].strip()
+                return "Bonifico a " + dettagli
+            if "Bonifico Disposto Da" in operazione or "Bonifico Istantaneo Disposto Da" in operazione:
                 # dettagli string is like "COD.[]DISP. [16 digits] [CASH/OTHR/SECU] [reason] Bonifico A Vostro Favore"
                 # we need to extract the reason
-                reason = dettagli[:32].split("Bonifico A Vostro Favore")[0].strip()
-                return operazione + " - " + reason
+                if "Bonifico A Vostro Favore" in dettagli:
+                    reason = dettagli[:32].split("Bonifico A Vostro Favore")[0].strip()
+                    return operazione + " - " + reason
+                return operazione + " - " + dettagli
             if "canone" in operazione.lower():
                 return operazione.capitalize() + " - " + dettagli
             if "imposta di bollo" in operazione.lower():
@@ -73,57 +83,50 @@ class IntesaParser(BankTransactionsParser):
             if "premio polizza" in operazione.lower():
                 return operazione.capitalize() + " - " + dettagli.capitalize()
             if "stipendio" in operazione.lower():
-                salary_info = dettagli.split("STIPENDIO")[1].strip()
-                salary_info = salary_info.split("Bonifico A Vostro Favore")[0].strip()
-                return "Stipendio" + " - " + salary_info
+                if "STIPENDIO" in dettagli:
+                    salary_info = dettagli.split("STIPENDIO")[1].strip()
+                    salary_info = salary_info.split("Bonifico A Vostro Favore")[0].strip()
+                    return "Stipendio" + " - " + salary_info
+                return "Stipendio" + " - " + dettagli
             if "assegn" in operazione.lower():
                 return operazione + " - " + dettagli
         else:
-            logger.warning(f"Could not extract description for operazione: {operazione} with details: {dettagli} and conto o carta: {conto_o_carta}. Defaulting to details.")
+            if "SUPERFLASH" not in conto_o_carta.upper():
+                logger.warning(f"Could not extract description for operazione: {operazione} with details: {dettagli} and conto o carta: {conto_o_carta}. Defaulting to details.")
             return dettagli
+    
+        # Default fallback
+        return dettagli if dettagli else operazione
 
-    def _extract_tipo_transazione_intesa(self, operazione: str, dettagli: str, conto_o_carta: str) -> str:
+    def _extract_transaction_type_intesa(self, operazione: str, dettagli: str, conto_o_carta: str) -> str:
         """
         Extract the transaction type from the operation and details.
+        
+        Uses TRANSACTION_MAP_INTESA to map operazione.lower() to transaction type.
+        Checks for substring matches in the mapping keys.
         """
-        if "Conto" in conto_o_carta:
-            if operazione.strip().upper() == "ACCREDITO BEU CON CONTABILE":
-                return "Bonif. v/fav."
-            if "Addebito Diretto" in operazione:
-                return "Addeb. diretto"
-            if operazione.strip() == "Assegni Circolari Emessi":
-                return "Assegni Circolari Emessi"
-            if "Carta N." in dettagli:
-                return "Pagam. POS"
-            if "Bonifico Disposto A Favore Di" in operazione or "Bonifico Istantaneo Da Voi Disposto A Favore Di" in operazione:
-                return "Disposizione"
-            if "Bonifico Disposto Da" in operazione or "Bonifico Istantaneo Disposto Da" in operazione:
-                return "Bonif. v/fav."
-            if "canone" in operazione.lower():
-                return "Canone investimento"
-            if "commission" in operazione.lower():
-                return "Commissione"
-            if "disposizione di giroconto" in operazione.lower():
-                return "Disposizione di giroconto"
-            if "imposta di bollo" in operazione.lower():
-                return "Imposta di bollo"
-            if "investimento" in operazione.lower():
-                return "Investimento"
-            if "BANCOMAT PAY" in operazione.upper():
-                return "BANCOMAT Pay"
-            if "Pagamento Delega F24" in operazione or "Pagamento Mav" in operazione:
-                return "Pagamento F24/Mav"
-            if "premio polizza" in operazione.lower():
-                return "Premio polizza assicurativa"
-            if "Ricarica Carta Prepagata" in operazione:
-                return "Ricarica Carta Prepagata"
-            if "stipendio" in operazione.lower():
-                return "Stipendio"
-            if "assegni" in operazione.lower():
-                return "Assegno"
-        else:
-            # it's a payment with card
-            return "Carta prepagata"
+        operazione_lower = operazione.lower().strip()
+        
+        # Check if it's a card payment (not from account)
+        if conto_o_carta and "Conto" not in conto_o_carta and conto_o_carta.strip() != "":
+            return CARTA_PREPAGATA
+        
+        # Special case: check for "Carta N." in dettagli (this is checked in dettagli, not operazione)
+        if dettagli and "Carta N." in dettagli:
+            return TRANSACTION_MAP_INTESA.get("carta n.", PAGAMENTO_CON_CARTA)
+        
+        # Try exact match first
+        if operazione_lower in TRANSACTION_MAP_INTESA:
+            return TRANSACTION_MAP_INTESA[operazione_lower]
+        
+        # Try substring matches (check if any mapping key is contained in operazione_lower)
+        # Sort by length (longest first) to match more specific patterns first
+        for key in sorted(TRANSACTION_MAP_INTESA.keys(), key=len, reverse=True):
+            if key in operazione_lower:
+                return TRANSACTION_MAP_INTESA[key]
+        
+        # Default fallback
+        return DEFAULT_TRANSACTION_TYPE_INTESA
     
     def parse(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -148,7 +151,7 @@ class IntesaParser(BankTransactionsParser):
             df = df[df['operazione'] != "Disposizione Di Bonifico"]
 
         df['descrizione'] = df.apply(lambda row: self._extract_description_intesa(row['operazione'], row['dettagli'], row['conto o carta']), axis=1)
-        df['tipo_transazione'] = df.apply(lambda row: self._extract_tipo_transazione_intesa(row['operazione'], row['dettagli'], row['conto o carta']), axis=1)
+        df['tipo_transazione'] = df.apply(lambda row: self._extract_transaction_type_intesa(row['operazione'], row['dettagli'], row['conto o carta']), axis=1)
         df['dettagli'] = df['dettagli'] + " - " + df['conto o carta']
         # Map your bank's columns to standard fields
         # Adjust these based on your actual file format

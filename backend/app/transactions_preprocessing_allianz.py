@@ -12,6 +12,10 @@ from .transactions_preprocessing import (
     register_transactions_parser,
     dataframe_to_list
 )
+from .transaction_type_mappings import (
+    TRANSACTION_MAP_ALLIANZ,
+    DEFAULT_TRANSACTION_TYPE_ALLIANZ
+)
 import pandas as pd
 from typing import Optional
 
@@ -47,27 +51,54 @@ class AllianzParser(BankTransactionsParser):
 
         if transaction_type == "Pagam. POS":
             # split on dash, take the second part and keep only the part after "ORE"
-            time_info = "ORE " + details.split('-')[1].strip().split('ORE')[1].strip()
-            # split on dash, take the third part and keep only the part before "CARTA"
-            transaction_info = details.split('-')[2].strip().split('CARTA')[0].strip()
-            return "POS" + " - " + transaction_info + " - " + time_info
+            if len(details.split('-')) > 1 and 'ORE' in details.split('-')[1]:
+                time_info = "ORE " + details.split('-')[1].strip().split('ORE')[1].strip()
+                # split on dash, take the third part and keep only the part before "CARTA"
+                if len(details.split('-')) > 2:
+                    transaction_info = details.split('-')[2].strip().split('CARTA')[0].strip()
+                    return "POS" + " - " + transaction_info + " - " + time_info
+            return "POS" + " - " + details
         elif transaction_type == "Addeb. diretto":
             # split on dash, take the second part
-            return "Addeb. diretto" + " - " + details.split('-')[1].strip()
+            if len(details.split('-')) > 1:
+                return "Addeb. diretto" + " - " + details.split('-')[1].strip()
+            return "Addeb. diretto" + " - " + details
         elif transaction_type == "Bancomat":
             # split on dash, take the second part and keep only the part after "ORE" and before "CARTA"
-            transaction_info = "ORE " + details.split('-')[1].strip().split('ORE')[1].strip()
-            transaction_info = transaction_info.split('CARTA')[0].strip()
-            return "Prelievo contanti" + " - " + transaction_info
+            if len(details.split('-')) > 1 and 'ORE' in details.split('-')[1]:
+                transaction_info = "ORE " + details.split('-')[1].strip().split('ORE')[1].strip()
+                transaction_info = transaction_info.split('CARTA')[0].strip()
+                return "Prelievo contanti" + " - " + transaction_info
+            return "Prelievo contanti" + " - " + details
         elif transaction_type == "Bonif. v/fav.":
             # remove the word starting with "RIF:"
-            return "Bonif. ricevuto" + " - " + ' '.join([word for word in details.split() if not word.startswith("RIF:")])
+            return (' '.join([word for word in details.split() if not word.startswith("RIF:")])).replace("Bonif. v/fav.", "Bonif. ricevuto")
         elif transaction_type == "Disposizione":
             # remove the word starting with "RIF:"
-            return "Bonif. effettuato" + " - " + ' '.join([word for word in details.split() if not word.startswith("RIF:")])
+            return (' '.join([word for word in details.split() if not word.startswith("RIF:")])).replace("Disposizione", "Bonif. effettuato")
         else:
             return ' '.join(details.split())
-    
+
+    def _extract_transaction_type_allianz(self, details: str) -> str:
+        """
+        Extract the transaction type from details for Allianz bank.
+        
+        Uses TRANSACTION_MAP_ALLIANZ to map transaction_type.lower() (first part before dash)
+        to standardized transaction type.
+        """
+        if '-' in details:
+            transaction_type = details.split('-')[0].strip()
+            transaction_type_lower = transaction_type.lower()
+            
+            # Look up in mapping
+            if transaction_type_lower in TRANSACTION_MAP_ALLIANZ:
+                return TRANSACTION_MAP_ALLIANZ[transaction_type_lower]
+            
+            # If not found, return the original transaction_type
+            return transaction_type
+        else:
+            # No dash, return the whole details stripped or default
+            return details.strip() if details else DEFAULT_TRANSACTION_TYPE_ALLIANZ
     def parse(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Parse your bank's specific format.
@@ -87,7 +118,7 @@ class AllianzParser(BankTransactionsParser):
         df['dettagli'] = df['descrizione']
         df['descrizione'] = df['dettagli'].apply(self._extract_description_allianz)
 
-        df['tipo_transazione'] = df['descrizione'].apply(lambda x: x.split('-')[0].strip())
+        df['tipo_transazione'] = df['dettagli'].apply(self._extract_transaction_type_allianz)
         # Map your bank's columns to standard fields
         # Adjust these based on your actual file format
         date_col = "data contabile"  # Your bank's date column
