@@ -17,6 +17,12 @@ class WithdrawalTypeEnum(str, Enum):
     OUT = "out"
 
 
+class AssetTypeEnum(str, Enum):
+    """Asset type enumeration."""
+    CASH = "cash"
+    INVESTMENT = "investment"
+
+
 # Transaction Schemas
 class TransactionBase(BaseModel):
     """Base transaction schema."""
@@ -181,11 +187,11 @@ class InvestmentWithdrawal(InvestmentWithdrawalBase):
 # Assets History Schemas
 class AssetsHistoryBase(BaseModel):
     """Base assets history schema."""
+    account_name: str
     bank_name: str
+    asset_type: AssetTypeEnum
     date: date
-    total_cash: float
-    total_investments: float
-    total_assets: float
+    amount: float
 
 
 class AssetsHistoryCreate(AssetsHistoryBase):
@@ -197,6 +203,7 @@ class AssetsHistory(AssetsHistoryBase):
     """Schema for assets history response."""
     id: int
     created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True

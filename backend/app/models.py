@@ -1,5 +1,5 @@
 """SQLAlchemy database models."""
-from sqlalchemy import Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, Enum as SQLEnum, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -16,6 +16,12 @@ class WithdrawalType(str, enum.Enum):
     """Withdrawal type enumeration."""
     IN = "in"
     OUT = "out"
+
+
+class AssetType(str, enum.Enum):
+    """Asset type enumeration."""
+    CASH = "cash"
+    INVESTMENT = "investment"
 
 
 class Bank(Base):
@@ -114,9 +120,15 @@ class AssetsHistory(Base):
     __tablename__ = "assets_history"
 
     id = Column(Integer, primary_key=True, index=True)
+    account_name = Column(String, nullable=False, index=True)
     bank_name = Column(String, nullable=False, index=True)
+    asset_type = Column(SQLEnum(AssetType), nullable=False, index=True)
     date = Column(Date, nullable=False, index=True)
-    total_cash = Column(Float, nullable=False)
-    total_investments = Column(Float, nullable=False)
-    total_assets = Column(Float, nullable=False)
+    amount = Column(Float, nullable=False)
     created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    # Composite index for efficient queries
+    __table_args__ = (
+        Index('idx_assets_history_bank_account_type_date', 'bank_name', 'account_name', 'asset_type', 'date'),
+    )
