@@ -27,6 +27,7 @@ class AssetTypeEnum(str, Enum):
 class TransactionBase(BaseModel):
     """Base transaction schema."""
     bank_name: str
+    account_name: str
     date: date
     amount: float
     description: Optional[str] = None
@@ -44,6 +45,7 @@ class TransactionCreate(TransactionBase):
 class TransactionUpdate(BaseModel):
     """Schema for updating a transaction."""
     bank_name: Optional[str] = None
+    account_name: Optional[str] = None
     date: Optional[date] = None
     amount: Optional[float] = None
     description: Optional[str] = None
@@ -209,6 +211,58 @@ class AssetsHistory(AssetsHistoryBase):
         from_attributes = True
 
 
+# Intesa Raw Transaction Schemas
+class IntesaRawTransactionBase(BaseModel):
+    """Base Intesa raw transaction schema."""
+    data: date
+    operazione: Optional[str] = None
+    dettagli: Optional[str] = None
+    conto_o_carta: Optional[str] = None
+    contabilizzazione: Optional[str] = None
+    categoria: Optional[str] = None
+    valuta: Optional[str] = None
+    importo: float
+
+
+class IntesaRawTransactionCreate(IntesaRawTransactionBase):
+    """Schema for creating an Intesa raw transaction."""
+    transaction_id: Optional[int] = None
+
+
+class IntesaRawTransaction(IntesaRawTransactionBase):
+    """Schema for Intesa raw transaction response."""
+    id: int
+    transaction_id: Optional[int] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# Allianz Raw Transaction Schemas
+class AllianzRawTransactionBase(BaseModel):
+    """Base Allianz raw transaction schema."""
+    data_contabile: date
+    data_valuta: Optional[date] = None
+    descrizione: Optional[str] = None
+    importo: float
+
+
+class AllianzRawTransactionCreate(AllianzRawTransactionBase):
+    """Schema for creating an Allianz raw transaction."""
+    transaction_id: Optional[int] = None
+
+
+class AllianzRawTransaction(AllianzRawTransactionBase):
+    """Schema for Allianz raw transaction response."""
+    id: int
+    transaction_id: Optional[int] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # Bank Schema
 class BankBase(BaseModel):
     """Base bank schema."""
@@ -223,6 +277,36 @@ class BankCreate(BankBase):
 
 class Bank(BankBase):
     """Schema for bank response."""
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# Account Schema
+class AccountBase(BaseModel):
+    """Base account schema."""
+    bank_name: str
+    account_name: str
+    status: bool = True  # True=live, False=closed
+
+
+class AccountCreate(AccountBase):
+    """Schema for creating an account."""
+    pass
+
+
+class AccountUpdate(BaseModel):
+    """Schema for updating an account."""
+    bank_name: Optional[str] = None
+    account_name: Optional[str] = None
+    status: Optional[bool] = None
+
+
+class Account(AccountBase):
+    """Schema for account response."""
     id: int
     created_at: datetime
     updated_at: datetime

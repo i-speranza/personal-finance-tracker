@@ -17,6 +17,7 @@ class StandardizedTransaction:
     def __init__(
         self,
         bank_name: str,
+        account_name: str,
         date: date,
         amount: float,
         description: Optional[str] = None,
@@ -26,6 +27,7 @@ class StandardizedTransaction:
         is_special: bool = False
     ):
         self.bank_name = bank_name
+        self.account_name = account_name
         self.date = date
         self.amount = amount
         self.description = description
@@ -38,6 +40,7 @@ class StandardizedTransaction:
         """Convert to dictionary for database insertion."""
         return {
             "bank_name": self.bank_name,
+            "account_name": self.account_name,
             "date": self.date,
             "amount": self.amount,
             "description": self.description,
@@ -53,7 +56,7 @@ def dataframe_to_list(df: pd.DataFrame) -> List[StandardizedTransaction]:
     Convert a DataFrame with standardized transaction columns to a list of StandardizedTransaction objects.
     
     Args:
-        df: DataFrame with columns: bank_name, date, amount, description, details, 
+        df: DataFrame with columns: bank_name, account_name, date, amount, description, details, 
             category, transaction_type, is_special 
             
     Returns:
@@ -75,6 +78,7 @@ def dataframe_to_list(df: pd.DataFrame) -> List[StandardizedTransaction]:
             
             transaction = StandardizedTransaction(
                 bank_name=str(row['bank_name']) if pd.notna(row.get('bank_name')) else None,
+                account_name=str(row['account_name']) if pd.notna(row.get('account_name')) else None,
                 date=trans_date,
                 amount=float(row['amount']) if pd.notna(row.get('amount')) else 0.0,
                 description=str(row['description']) if pd.notna(row.get('description')) else None,
@@ -249,6 +253,7 @@ class TransactionsFileParser:
     def __init__(self, parser_registry: Optional[TransactionsParserRegistry] = None):
         self.registry = parser_registry or _transactions_parser_registry
         self.file_reader = FileReader()
+        self._current_parser: Optional[BankTransactionsParser] = None
     
     def parse_file(
         self,
@@ -287,6 +292,9 @@ class TransactionsFileParser:
                 "Please register a parser for this bank format."
             )
         
+        # Store parser reference for raw data access
+        self._current_parser = parser
+        
         # Read file
         df = self.file_reader.read_file(file_path, skiprows=parser.skiprows, skipfooter=parser.skipfooter)
         
@@ -308,6 +316,18 @@ class TransactionsFileParser:
             result_df = result_df.groupby([c for c in result_df.columns if c not in 'amount'])['amount'].sum().reset_index()
 
         return result_df
+    
+    def get_raw_dataframe(self) -> Optional[pd.DataFrame]:
+        """
+        Get the raw DataFrame before preprocessing from the last parsed file.
+        
+        Returns:
+            Raw DataFrame as it was read from the file, or None if not available.
+            The DataFrame contains the original bank-specific columns before any preprocessing.
+        """
+        if self._current_parser and hasattr(self._current_parser, 'get_raw_dataframe'):
+            return self._current_parser.get_raw_dataframe()
+        return None
 
 
 # Example bank parser implementation (for testing and as a template)

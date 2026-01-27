@@ -6,7 +6,7 @@ data from a CSV file with specific column structure, applying bank-specific prep
 for Intesa and Allianz banks.
 
 Expected CSV columns:
-- Date, Operazione, Dettagli, Tipo_transazione, Categoria, Importo, Transazione_speciale, Banca
+- Date, Operazione, Dettagli, Tipo_transazione, Categoria, Importo, Transazione_speciale, Banca, account_name
 """
 import sys
 import argparse
@@ -262,7 +262,7 @@ def process_legacy_csv(csv_path: Path) -> pd.DataFrame:
     
     # Validate required columns
     required_columns = ['Date', 'Operazione', 'Dettagli', 'Tipo_transazione', 
-                       'Categoria', 'Importo', 'Transazione_speciale', 'Banca']
+                       'Categoria', 'Importo', 'Transazione_speciale', 'Banca', 'account_name']
     missing_columns = [col for col in required_columns if col not in df.columns]
     if missing_columns:
         raise ValueError(f"Missing required columns: {missing_columns}")
@@ -277,6 +277,11 @@ def process_legacy_csv(csv_path: Path) -> pd.DataFrame:
         try:
             # Get bank name and normalize
             bank_name = str(row['Banca']).strip().lower()
+            
+            # Get account name
+            account_name = str(row['account_name']).strip() if pd.notna(row['account_name']) else None
+            if not account_name:
+                raise ValueError("Account name cannot be empty")
             
             # Normalize date
             trans_date = normalize_date(row['Date'])
@@ -315,6 +320,7 @@ def process_legacy_csv(csv_path: Path) -> pd.DataFrame:
             
             processed_rows.append({
                 'bank_name': bank_name,
+                'account_name': account_name,
                 'date': trans_date,
                 'amount': amount,
                 'description': description,
@@ -381,6 +387,7 @@ def insert_transactions(df: pd.DataFrame) -> tuple[int, int]:
             # Check for duplicates
             existing = db.query(Transaction).filter(
                 Transaction.bank_name == row['bank_name'],
+                Transaction.account_name == row['account_name'],
                 Transaction.date == row['date'],
                 Transaction.amount == row['amount'],
                 Transaction.description == row['description']
@@ -394,6 +401,7 @@ def insert_transactions(df: pd.DataFrame) -> tuple[int, int]:
             # Create new transaction
             transaction = Transaction(
                 bank_name=row['bank_name'],
+                account_name=row['account_name'],
                 date=row['date'],
                 amount=row['amount'],
                 description=row['description'],

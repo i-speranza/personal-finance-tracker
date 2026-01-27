@@ -35,12 +35,30 @@ class Bank(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
 
+class Account(Base):
+    """Account reference table."""
+    __tablename__ = "accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bank_name = Column(String, nullable=False, index=True)
+    account_name = Column(String, nullable=False, index=True)
+    status = Column(Boolean, default=True, nullable=False)  # True=live, False=closed
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    # Composite unique constraint on (bank_name, account_name)
+    __table_args__ = (
+        Index('idx_accounts_bank_account', 'bank_name', 'account_name', unique=True),
+    )
+
+
 class Transaction(Base):
     """Transaction table."""
     __tablename__ = "transactions"
 
     id = Column(Integer, primary_key=True, index=True)
     bank_name = Column(String, nullable=False, index=True)
+    account_name = Column(String, nullable=False, index=True)
     date = Column(Date, nullable=False, index=True)
     amount = Column(Float, nullable=False)
     description = Column(String)
@@ -50,6 +68,42 @@ class Transaction(Base):
     is_special = Column(Boolean, default=False)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class IntesaRawTransaction(Base):
+    """Raw Intesa transaction data before preprocessing."""
+    __tablename__ = "intesa_raw_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=True, unique=True, index=True)
+    data = Column(Date, nullable=False, index=True)
+    operazione = Column(String)
+    dettagli = Column(String)
+    conto_o_carta = Column(String)
+    contabilizzazione = Column(String)
+    categoria = Column(String)
+    valuta = Column(String)
+    importo = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+
+    # Relationship
+    transaction = relationship("Transaction", backref="intesa_raw_transaction", uselist=False)
+
+
+class AllianzRawTransaction(Base):
+    """Raw Allianz transaction data before preprocessing."""
+    __tablename__ = "allianz_raw_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=True, unique=True, index=True)
+    data_contabile = Column(Date, nullable=False, index=True)
+    data_valuta = Column(Date)
+    descrizione = Column(String)
+    importo = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+
+    # Relationship
+    transaction = relationship("Transaction", backref="allianz_raw_transaction", uselist=False)
 
 
 class InvestmentProduct(Base):

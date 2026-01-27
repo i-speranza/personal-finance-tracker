@@ -30,6 +30,7 @@ class IntesaParser(BankTransactionsParser):
     """
     def __init__(self):
         super().__init__(skiprows=18, skipfooter=0)
+        self._raw_df: Optional[pd.DataFrame] = None
     
     def get_bank_name(self) -> str:
         return "intesa"  
@@ -128,21 +129,34 @@ class IntesaParser(BankTransactionsParser):
         # Default fallback
         return DEFAULT_TRANSACTION_TYPE_INTESA
     
+    def get_raw_dataframe(self) -> Optional[pd.DataFrame]:
+        """
+        Get the raw DataFrame before preprocessing.
+        
+        Returns:
+            Raw DataFrame as it was read from the file, or None if not available
+        """
+        return self._raw_df
+    
     def parse(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Parse your bank's specific format.
         
         Steps:
         1. Clean column names
-        2. Map bank columns to standard fields
-        3. Normalize dates and amounts
-        4. Create DataFrame with standardized transaction columns
+        2. Store raw DataFrame before any modifications (except for the colnames)
+        3. Map bank columns to standard fields
+        4. Normalize dates and amounts
+        5. Create DataFrame with standardized transaction columns
         """
         transactions_data = []
         
         # Clean column names
         df.columns = df.columns.str.lower().str.strip()
 
+        # Store raw DataFrame before any modifications (deep copy to preserve original)
+        self._raw_df = df.copy(deep=True)
+        
         # check if there are rows where operazione == "Disposizione Di Bonifico", 
         # if so, display a warning with those rows and remove them, since there is no corresponding transaction in the details
         if df[df['operazione'] == "Disposizione Di Bonifico"].shape[0] > 0:

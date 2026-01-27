@@ -26,6 +26,7 @@ class AllianzParser(BankTransactionsParser):
     """
     def __init__(self):
         super().__init__(skiprows=3, skipfooter=4)
+        self._raw_df: Optional[pd.DataFrame] = None
     
     def get_bank_name(self) -> str:
         return "Allianz"  
@@ -99,22 +100,37 @@ class AllianzParser(BankTransactionsParser):
         else:
             # No dash, return the whole details stripped or default
             return details.strip() if details else DEFAULT_TRANSACTION_TYPE_ALLIANZ
+    
+    def get_raw_dataframe(self) -> Optional[pd.DataFrame]:
+        """
+        Get the raw DataFrame before preprocessing.
+        
+        Returns:
+            Raw DataFrame as it was read from the file, or None if not available
+        """
+        return self._raw_df
+    
     def parse(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Parse your bank's specific format.
         
         Steps:
         1. Clean column names
-        2. Map bank columns to standard fields
-        3. Normalize dates and amounts
-        4. Create DataFrame with standardized transaction columns
+        2. Store raw DataFrame before any modifications
+        3. Map bank columns to standard fields
+        4. Normalize dates and amounts
+        5. Create DataFrame with standardized transaction columns
         """
-        transactions_data = []
         
-        # Clean column names
+        # Clean column names and fill the amount column 
         df.columns = df.columns.str.lower().str.strip()
-
         df['importo'] = df['dare euro'].fillna(0) + df['avere euro'].fillna(0) 
+        
+        # Store raw DataFrame before any other modifications (deep copy to preserve original)
+        self._raw_df = df.copy(deep=True)
+        
+        transactions_data = []
+
         df['dettagli'] = df['descrizione']
         df['descrizione'] = df['dettagli'].apply(self._extract_description_allianz)
 
