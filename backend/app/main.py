@@ -97,10 +97,10 @@ async def health_check():
     return {"status": "healthy"}
 
 
-# Import routers (will be added in future implementation)
-# from .routers import transactions, investments, assets, dashboard, export
-# app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
-# app.include_router(investments.router, prefix="/api/investment-products", tags=["investments"])
-# app.include_router(assets.router, prefix="/api/assets-history", tags=["assets"])
-# app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
-# app.include_router(export.router, prefix="/api/export", tags=["export"])
+# Import routers
+from .routers import transactions, banks, accounts, assets_history
+
+app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
+app.include_router(banks.router, prefix="/api/banks", tags=["banks"])
+app.include_router(accounts.router, prefix="/api/accounts", tags=["accounts"])
+app.include_router(assets_history.router, prefix="/api/assets-history", tags=["assets-history"])
