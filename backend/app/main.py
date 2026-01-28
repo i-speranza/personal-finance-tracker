@@ -30,15 +30,36 @@ app.add_middleware(
 
 # Mount static files for frontend
 frontend_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend")
-if os.path.exists(frontend_path):
-    app.mount("/static", StaticFiles(directory=os.path.join(frontend_path, "static")), name="static")
-    app.mount("/lib", StaticFiles(directory=os.path.join(frontend_path, "lib")), name="lib")
+frontend_dist_path = os.path.join(frontend_path, "dist")
+
+# Check if production build exists (dist folder)
+is_production = os.path.exists(frontend_dist_path)
+
+if is_production:
+    # Production: Serve built files from dist
+    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist_path, "assets")), name="assets")
+    # Serve other static files from dist root
+    static_files = StaticFiles(directory=frontend_dist_path)
+    app.mount("/static", static_files, name="static")
+else:
+    # Development: Serve from frontend/static for compatibility
+    if os.path.exists(frontend_path):
+        static_dir = os.path.join(frontend_path, "static")
+        if os.path.exists(static_dir):
+            app.mount("/static", StaticFiles(directory=static_dir), name="static")
+        lib_dir = os.path.join(frontend_path, "lib")
+        if os.path.exists(lib_dir):
+            app.mount("/lib", StaticFiles(directory=lib_dir), name="lib")
 
 
 @app.get("/")
 async def root():
     """Root endpoint - serve index.html."""
-    index_path = os.path.join(frontend_path, "index.html")
+    if is_production:
+        index_path = os.path.join(frontend_dist_path, "index.html")
+    else:
+        index_path = os.path.join(frontend_path, "index.html")
+    
     if os.path.exists(index_path):
         return FileResponse(index_path)
     return {"message": "Personal Finance Tracker API", "version": "1.0.0"}
@@ -47,7 +68,11 @@ async def root():
 @app.get("/upload.html")
 async def upload_page():
     """Serve upload.html."""
-    upload_path = os.path.join(frontend_path, "upload.html")
+    if is_production:
+        upload_path = os.path.join(frontend_dist_path, "upload.html")
+    else:
+        upload_path = os.path.join(frontend_path, "upload.html")
+    
     if os.path.exists(upload_path):
         return FileResponse(upload_path)
     return {"error": "Upload page not found"}
@@ -56,7 +81,11 @@ async def upload_page():
 @app.get("/edit.html")
 async def edit_page():
     """Serve edit.html."""
-    edit_path = os.path.join(frontend_path, "edit.html")
+    if is_production:
+        edit_path = os.path.join(frontend_dist_path, "edit.html")
+    else:
+        edit_path = os.path.join(frontend_path, "edit.html")
+    
     if os.path.exists(edit_path):
         return FileResponse(edit_path)
     return {"error": "Edit page not found"}
