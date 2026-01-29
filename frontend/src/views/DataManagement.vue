@@ -181,6 +181,13 @@
           <h3>Transactions</h3>
           <div class="header-actions">
             <button 
+              class="btn btn-outline btn-sm"
+              @click="exportTransactionsToCSV"
+              title="Export filtered data to CSV"
+            >
+              Export CSV
+            </button>
+            <button 
               class="btn btn-secondary btn-sm"
               @click="clearTransactionFilters"
               v-if="hasActiveTransactionFilters"
@@ -423,6 +430,13 @@
         <div class="panel-header">
           <h3>Assets History</h3>
           <div class="header-actions">
+            <button 
+              class="btn btn-outline btn-sm"
+              @click="exportAssetsHistoryToCSV"
+              title="Export filtered data to CSV"
+            >
+              Export CSV
+            </button>
             <button 
               class="btn btn-secondary btn-sm"
               @click="clearAssetsFilters"
@@ -1208,6 +1222,79 @@ async function saveAssetsChanges() {
   await fetchAssetsHistory();
 }
 
+// ============ CSV EXPORT ============
+function escapeCSVValue(value: string | number | boolean | null | undefined): string {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  // Escape quotes by doubling them and wrap in quotes if contains comma, newline, or quote
+  if (str.includes(',') || str.includes('\n') || str.includes('"')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function downloadCSV(content: string, filename: string) {
+  const blob = new Blob(['\ufeff' + content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+function exportTransactionsToCSV() {
+  // Get filtered rows (respects current filters)
+  const filteredRows = txTable.getFilteredRowModel().rows;
+  
+  // CSV headers
+  const headers = ['Date', 'Bank', 'Account', 'Amount', 'Description', 'Type', 'Special'];
+  
+  // Build CSV content
+  const rows = filteredRows.map(row => {
+    const tx = row.original;
+    return [
+      escapeCSVValue(tx.date),
+      escapeCSVValue(getBankDisplayName(tx.bank_name)),
+      escapeCSVValue(tx.account_name),
+      escapeCSVValue(tx.amount),
+      escapeCSVValue(tx.description || ''),
+      escapeCSVValue(tx.transaction_type || ''),
+      escapeCSVValue(tx.is_special ? 'Yes' : 'No'),
+    ].join(',');
+  });
+  
+  const csvContent = [headers.join(','), ...rows].join('\n');
+  const timestamp = new Date().toISOString().slice(0, 10);
+  downloadCSV(csvContent, `transactions_${timestamp}.csv`);
+}
+
+function exportAssetsHistoryToCSV() {
+  // Get filtered rows (respects current filters)
+  const filteredRows = assetsTable.getFilteredRowModel().rows;
+  
+  // CSV headers
+  const headers = ['Date', 'Bank', 'Account', 'Asset Type', 'Amount'];
+  
+  // Build CSV content
+  const rows = filteredRows.map(row => {
+    const asset = row.original;
+    return [
+      escapeCSVValue(asset.date),
+      escapeCSVValue(getBankDisplayName(asset.bank_name)),
+      escapeCSVValue(asset.account_name),
+      escapeCSVValue(getAssetTypeDisplayName(asset.asset_type)),
+      escapeCSVValue(asset.amount),
+    ].join(',');
+  });
+  
+  const csvContent = [headers.join(','), ...rows].join('\n');
+  const timestamp = new Date().toISOString().slice(0, 10);
+  downloadCSV(csvContent, `assets_history_${timestamp}.csv`);
+}
+
 // ============ LIFECYCLE ============
 onMounted(async () => {
   // Load initial data for all tabs
@@ -1407,6 +1494,17 @@ h4 {
 
 .btn-danger:hover:not(:disabled) {
   background: #c82333;
+}
+
+.btn-outline {
+  background: transparent;
+  color: #007bff;
+  border: 1px solid #007bff;
+}
+
+.btn-outline:hover:not(:disabled) {
+  background: #007bff;
+  color: white;
 }
 
 .btn-sm {
