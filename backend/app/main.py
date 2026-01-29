@@ -1,11 +1,19 @@
 """FastAPI application main file."""
+import logging
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-import os
 
 from .database import engine, Base
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 # Import models to register them with Base.metadata
 from . import models  # noqa: F401
 
@@ -52,43 +60,38 @@ else:
             app.mount("/lib", StaticFiles(directory=lib_dir), name="lib")
 
 
+def get_index_path():
+    """Get the path to index.html based on environment."""
+    if is_production:
+        return os.path.join(frontend_dist_path, "index.html")
+    return os.path.join(frontend_path, "index.html")
+
+
 @app.get("/")
 async def root():
     """Root endpoint - serve index.html."""
-    if is_production:
-        index_path = os.path.join(frontend_dist_path, "index.html")
-    else:
-        index_path = os.path.join(frontend_path, "index.html")
-    
+    index_path = get_index_path()
     if os.path.exists(index_path):
         return FileResponse(index_path)
     return {"message": "Personal Finance Tracker API", "version": "1.0.0"}
 
 
-@app.get("/upload.html")
+@app.get("/upload")
 async def upload_page():
-    """Serve upload.html."""
-    if is_production:
-        upload_path = os.path.join(frontend_dist_path, "upload.html")
-    else:
-        upload_path = os.path.join(frontend_path, "upload.html")
-    
-    if os.path.exists(upload_path):
-        return FileResponse(upload_path)
-    return {"error": "Upload page not found"}
+    """Serve index.html for Vue Router /upload route."""
+    index_path = get_index_path()
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"error": "Page not found"}
 
 
-@app.get("/edit.html")
+@app.get("/edit")
 async def edit_page():
-    """Serve edit.html."""
-    if is_production:
-        edit_path = os.path.join(frontend_dist_path, "edit.html")
-    else:
-        edit_path = os.path.join(frontend_path, "edit.html")
-    
-    if os.path.exists(edit_path):
-        return FileResponse(edit_path)
-    return {"error": "Edit page not found"}
+    """Serve index.html for Vue Router /edit route."""
+    index_path = get_index_path()
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"error": "Page not found"}
 
 
 @app.get("/health")
@@ -98,9 +101,10 @@ async def health_check():
 
 
 # Import routers
-from .routers import transactions, banks, accounts, assets_history
+from .routers import transactions, banks, accounts, assets_history, upload
 
 app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
 app.include_router(banks.router, prefix="/api/banks", tags=["banks"])
 app.include_router(accounts.router, prefix="/api/accounts", tags=["accounts"])
 app.include_router(assets_history.router, prefix="/api/assets-history", tags=["assets-history"])
+app.include_router(upload.router, prefix="/api/upload", tags=["upload"])
