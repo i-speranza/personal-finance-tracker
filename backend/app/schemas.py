@@ -290,6 +290,7 @@ class AccountBase(BaseModel):
     """Base account schema."""
     bank_name: str
     account_name: str
+    asset_type: Optional[AssetTypeEnum] = None  # cash or investment
     status: bool = True  # True=live, False=closed
 
 
@@ -302,6 +303,7 @@ class AccountUpdate(BaseModel):
     """Schema for updating an account."""
     bank_name: Optional[str] = None
     account_name: Optional[str] = None
+    asset_type: Optional[AssetTypeEnum] = None
     status: Optional[bool] = None
 
 

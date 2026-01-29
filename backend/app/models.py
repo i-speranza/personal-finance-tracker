@@ -42,6 +42,7 @@ class Account(Base):
     id = Column(Integer, primary_key=True, index=True)
     bank_name = Column(String, nullable=False, index=True)
     account_name = Column(String, nullable=False, index=True)
+    asset_type = Column(SQLEnum(AssetType), nullable=True, index=True)  # cash or investment
     status = Column(Boolean, default=True, nullable=False)  # True=live, False=closed
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

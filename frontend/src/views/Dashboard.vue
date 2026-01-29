@@ -236,6 +236,7 @@ const error = ref<string | null>(null);
 const allTransactions = ref<Transaction[]>([]);
 const filteredTransactions = ref<Transaction[]>([]);
 const assetsHistory = ref<AssetsHistory[]>([]);
+const cashAccounts = ref<{ bank_name: string; account_name: string }[]>([]);
 
 // Filters
 const filters = ref({
@@ -251,6 +252,16 @@ const filters = ref({
 // Available options for dropdowns
 const availableBanks = ref<string[]>([]);
 const availableAccounts = ref<string[]>([]);
+
+// Fetch CASH accounts from API
+async function fetchCashAccounts() {
+  try {
+    const accounts = await api.accounts.getAll({ asset_type: 'cash' });
+    cashAccounts.value = accounts.map(a => ({ bank_name: a.bank_name, account_name: a.account_name }));
+  } catch (err) {
+    console.error('Error fetching cash accounts:', err);
+  }
+}
 
 // Fetch transactions from API
 async function fetchTransactions() {
@@ -275,13 +286,18 @@ async function fetchTransactions() {
     const transactions = await api.transactions.getAll(params);
     allTransactions.value = transactions;
     
-    // Extract unique banks and accounts
+    // Extract unique banks and accounts from transactions that are CASH accounts
+    const cashAccountSet = new Set(cashAccounts.value.map(a => `${a.bank_name}|${a.account_name}`));
     const banks = new Set<string>();
     const accounts = new Set<string>();
     
     transactions.forEach(t => {
-      banks.add(t.bank_name);
-      accounts.add(t.account_name);
+      // Only include banks/accounts that are CASH type
+      const key = `${t.bank_name}|${t.account_name}`;
+      if (cashAccountSet.has(key)) {
+        banks.add(t.bank_name);
+        accounts.add(t.account_name);
+      }
     });
     
     const sortedBanks = Array.from(banks).sort();
@@ -330,6 +346,10 @@ async function fetchTransactions() {
 function applyClientFilters() {
   let filtered = [...allTransactions.value];
   
+  // First filter by CASH accounts only
+  const cashAccountSet = new Set(cashAccounts.value.map(a => `${a.bank_name}|${a.account_name}`));
+  filtered = filtered.filter(t => cashAccountSet.has(`${t.bank_name}|${t.account_name}`));
+  
   // Filter by bank names (multiselect)
   if (filters.value.bankNames.length > 0 && filters.value.bankNames.length < availableBanks.value.length) {
     filtered = filtered.filter(t => filters.value.bankNames.includes(t.bank_name));
@@ -359,10 +379,14 @@ function applyClientFilters() {
 
 // Handle bank filter change - update available accounts
 function onBankChange() {
+  // Filter by CASH accounts only
+  const cashAccountSet = new Set(cashAccounts.value.map(a => `${a.bank_name}|${a.account_name}`));
+  const cashTransactions = allTransactions.value.filter(t => cashAccountSet.has(`${t.bank_name}|${t.account_name}`));
+  
   // Update available accounts based on selected banks
   if (filters.value.bankNames.length > 0 && filters.value.bankNames.length < availableBanks.value.length) {
     const accounts = new Set<string>();
-    allTransactions.value
+    cashTransactions
       .filter(t => filters.value.bankNames.includes(t.bank_name))
       .forEach(t => accounts.add(t.account_name));
     const newAvailableAccounts = Array.from(accounts).sort();
@@ -377,9 +401,9 @@ function onBankChange() {
       filters.value.accountNames = [...newAvailableAccounts];
     }
   } else {
-    // Show all accounts if all banks are selected
+    // Show all CASH accounts if all banks are selected
     const accounts = new Set<string>();
-    allTransactions.value.forEach(t => accounts.add(t.account_name));
+    cashTransactions.forEach(t => accounts.add(t.account_name));
     const allAccounts = Array.from(accounts).sort();
     availableAccounts.value = allAccounts;
     
@@ -1243,7 +1267,8 @@ function cleanupCharts() {
 }
 
 // Initialize on mount
-onMounted(() => {
+onMounted(async () => {
+  await fetchCashAccounts();
   fetchTransactions();
   fetchAssetsHistory();
 });
