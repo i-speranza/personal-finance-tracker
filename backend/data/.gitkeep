@@ -1,0 +1,2 @@
+# This directory stores uploaded raw transaction files
+# Files are named: [bank]_[account]_from_[YYYY_MM_DD]_to_[YYYY_MM_DD].[ext]

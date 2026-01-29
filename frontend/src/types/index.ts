@@ -236,6 +236,7 @@ export interface Account {
   id: number;
   bank_name: string;
   account_name: string;
+  asset_type: AssetType | null;
   status: boolean;
   created_at: string;
   updated_at: string;
@@ -244,12 +245,14 @@ export interface Account {
 export interface AccountCreate {
   bank_name: string;
   account_name: string;
+  asset_type?: AssetType | null;
   status?: boolean;
 }
 
 export interface AccountUpdate {
   bank_name?: string;
   account_name?: string;
+  asset_type?: AssetType | null;
   status?: boolean;
 }
 
@@ -264,4 +267,71 @@ export interface PaginatedResponse<T> {
   page: number;
   size: number;
   pages: number;
+}
+
+// Upload Workflow Types
+export interface UploadWarning {
+  type: 'filtered_row' | 'duplicate' | 'parsing_error';
+  message: string;
+  details?: Record<string, unknown>;
+}
+
+export interface ParsedTransaction {
+  bank_name: string;
+  account_name: string;
+  date: string;
+  amount: number;
+  description: string | null;
+  details: string | null;
+  category: string | null;
+  transaction_type: string | null;
+  is_special: boolean;
+}
+
+export interface PreprocessingResult {
+  transactions: ParsedTransaction[];
+  warnings: UploadWarning[];
+  date_range: {
+    first_date: string;
+    last_date: string;
+  };
+  saved_filename: string;
+}
+
+export interface HarmonizationResult {
+  new_transactions: ParsedTransaction[];
+  duplicate_transactions: ParsedTransaction[];
+}
+
+export interface CommitRequest {
+  transactions: ParsedTransaction[];
+}
+
+export interface CommitResult {
+  inserted_count: number;
+  message: string;
+}
+
+export interface AccountWithLastDate {
+  id: number;
+  bank_name: string;
+  account_name: string;
+  asset_type: AssetType | null;
+  status: boolean;
+  last_transaction_date: string | null;
+}
+
+export interface SyncAccountsResult {
+  created_count: number;
+  updated_count: number;
+  accounts: Account[];
+}
+
+export interface BulkAssetsHistoryCreate {
+  entries: AssetsHistoryCreate[];
+}
+
+export interface BulkAssetsHistoryResult {
+  created_count: number;
+  entries: AssetsHistory[];
 }

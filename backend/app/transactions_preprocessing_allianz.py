@@ -29,7 +29,7 @@ class AllianzParser(BankTransactionsParser):
         self._raw_df: Optional[pd.DataFrame] = None
     
     def get_bank_name(self) -> str:
-        return "Allianz"  
+        return "allianz"  # Use lowercase for consistency  
     
     def can_parse(self, df: pd.DataFrame, filename: Optional[str] = None) -> bool:
         """
@@ -183,7 +183,7 @@ def example_usage():
     example_file = Path(__file__).parent.parent / "examples" / "allianz_transactions_example.xls"    
     
     try:
-        df = parser.parse_file(example_file, bank_name="Allianz")
+        df = parser.parse_file(example_file, bank_name="allianz")
         print(df)
         # Convert to list of dicts for display
         transactions = dataframe_to_list(df)

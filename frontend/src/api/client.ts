@@ -26,6 +26,15 @@ import type {
   AccountUpdate,
   ApiError as ApiErrorType,
   PaginatedResponse,
+  // Upload workflow types
+  PreprocessingResult,
+  HarmonizationResult,
+  ParsedTransaction,
+  CommitResult,
+  AccountWithLastDate,
+  BulkAssetsHistoryCreate,
+  BulkAssetsHistoryResult,
+  SyncAccountsResult,
 } from '@/types';
 
 const API_BASE_URL = import.meta.env.DEV ? '/api' : '/api';
@@ -264,6 +273,13 @@ export const assetsHistoryApi = {
     });
   },
 
+  createBulk: (data: BulkAssetsHistoryCreate): Promise<BulkAssetsHistoryResult> => {
+    return request<BulkAssetsHistoryResult>('/assets-history/bulk', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
   update: (id: number, data: Partial<AssetsHistoryCreate>): Promise<AssetsHistory> => {
     return request<AssetsHistory>(`/assets-history/${id}`, {
       method: 'PUT',
@@ -298,12 +314,29 @@ export const banksApi = {
 
 // Accounts API
 export const accountsApi = {
-  getAll: (): Promise<Account[]> => {
-    return request<Account[]>('/accounts');
+  getAll: (params?: { bank_name?: string; asset_type?: string }): Promise<Account[]> => {
+    const searchParams = new URLSearchParams();
+    if (params?.bank_name) searchParams.append('bank_name', params.bank_name);
+    if (params?.asset_type) searchParams.append('asset_type', params.asset_type);
+    const query = searchParams.toString();
+    return request<Account[]>(`/accounts${query ? `?${query}` : ''}`);
   },
 
   getById: (id: number): Promise<Account> => {
     return request<Account>(`/accounts/${id}`);
+  },
+
+  getLastTransactionDates: (activeOnly: boolean = true, assetType?: string): Promise<AccountWithLastDate[]> => {
+    const searchParams = new URLSearchParams();
+    searchParams.append('active_only', activeOnly.toString());
+    if (assetType) searchParams.append('asset_type', assetType);
+    return request<AccountWithLastDate[]>(`/accounts/last-transaction-dates?${searchParams.toString()}`);
+  },
+
+  syncFromAssetsHistory: (): Promise<SyncAccountsResult> => {
+    return request<SyncAccountsResult>('/accounts/sync-from-assets-history', {
+      method: 'POST',
+    });
   },
 
   create: (data: AccountCreate): Promise<Account> => {
@@ -321,6 +354,50 @@ export const accountsApi = {
   },
 };
 
+// Upload API
+export const uploadApi = {
+  preprocess: async (
+    file: File,
+    bankName: string,
+    accountName: string
+  ): Promise<PreprocessingResult> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('bank_name', bankName);
+    formData.append('account_name', accountName);
+
+    const url = `${API_BASE_URL}/upload/preprocess`;
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+      // Note: Don't set Content-Type header - browser will set it with boundary for FormData
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({
+        detail: response.statusText,
+      }));
+      throw new ApiError(response.status, error.detail);
+    }
+
+    return response.json();
+  },
+
+  harmonize: (transactions: ParsedTransaction[]): Promise<HarmonizationResult> => {
+    return request<HarmonizationResult>('/upload/harmonize', {
+      method: 'POST',
+      body: JSON.stringify(transactions),
+    });
+  },
+
+  commit: (transactions: ParsedTransaction[]): Promise<CommitResult> => {
+    return request<CommitResult>('/upload/commit', {
+      method: 'POST',
+      body: JSON.stringify({ transactions }),
+    });
+  },
+};
+
 // Export all APIs
 export const api = {
   transactions: transactionsApi,
@@ -331,4 +408,5 @@ export const api = {
   assetsHistory: assetsHistoryApi,
   banks: banksApi,
   accounts: accountsApi,
+  upload: uploadApi,
 };

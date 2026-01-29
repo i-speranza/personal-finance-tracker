@@ -3,10 +3,23 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date
+from pydantic import BaseModel
 
 from ..database import get_db
 from ..models import AssetsHistory
 from ..schemas import AssetsHistory as AssetsHistorySchema, AssetsHistoryCreate
+
+
+class BulkAssetsHistoryCreate(BaseModel):
+    """Schema for bulk creating assets history entries."""
+    entries: List[AssetsHistoryCreate]
+
+
+class BulkAssetsHistoryResult(BaseModel):
+    """Result from bulk assets history creation."""
+    created_count: int
+    entries: List[AssetsHistorySchema]
+
 
 router = APIRouter()
 
@@ -65,6 +78,42 @@ async def create_asset_history(
     db.commit()
     db.refresh(db_asset)
     return db_asset
+
+
+@router.post("/bulk", response_model=BulkAssetsHistoryResult, status_code=201)
+async def create_bulk_asset_history(
+    request: BulkAssetsHistoryCreate,
+    db: Session = Depends(get_db),
+):
+    """
+    Create multiple assets history entries at once.
+    
+    Useful for inputting current values for all accounts at a specific date.
+    """
+    if not request.entries:
+        return BulkAssetsHistoryResult(created_count=0, entries=[])
+    
+    created_entries = []
+    try:
+        for entry in request.entries:
+            db_asset = AssetsHistory(**entry.dict())
+            db.add(db_asset)
+            db.flush()  # Flush to get the ID
+            created_entries.append(db_asset)
+        
+        db.commit()
+        
+        # Refresh all entries to get updated data
+        for entry in created_entries:
+            db.refresh(entry)
+        
+        return BulkAssetsHistoryResult(
+            created_count=len(created_entries),
+            entries=created_entries
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error creating entries: {str(e)}")
 
 
 @router.put("/{asset_id}", response_model=AssetsHistorySchema)
