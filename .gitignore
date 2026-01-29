@@ -245,7 +245,7 @@ coverage/
 # Project-specific
 data/*.db
 data/*.db-journal
-backend/uploads/*
-!backend/uploads/.gitkeep
+backend/data/*
+!backend/data/.gitkeep
 exports/*
 !exports/.gitkeep

@@ -9,7 +9,7 @@ personal-finance-tracker/
 ├── backend/
 │   ├── app/              # FastAPI application
 │   ├── scripts/          # Migration scripts
-│   ├── uploads/          # Temporary file storage
+│   ├── data/             # Raw uploaded transaction files
 │   ├── pyproject.toml    # Poetry dependencies
 │   └── run.py           # Application entry point
 ├── frontend/            # Vue 3 + Vite + TypeScript frontend
