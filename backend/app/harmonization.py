@@ -42,8 +42,8 @@ def detect_duplicates(
     Detect duplicate transactions by checking against existing database records.
     
     Duplicates are identified by exact match on:
-    - bank_name
-    - account_name
+    - bank_name (case-insensitive)
+    - account_name (case-insensitive)
     - date
     - amount
     - description
@@ -60,15 +60,39 @@ def detect_duplicates(
     new_transactions = []
     duplicate_info_list = []
     
+    if not transactions:
+        logger.info("No transactions to check for duplicates")
+        return new_transactions, duplicate_info_list
+    
     for transaction in transactions:
         try:
-            # Check if transaction exists in database
+            # Normalize values for comparison
+            trans_bank_name = transaction.bank_name.lower() if transaction.bank_name else None
+            trans_account_name = transaction.account_name.lower() if transaction.account_name else None
+            # Normalize description: strip whitespace and treat empty string as None
+            trans_description = transaction.description.strip() if transaction.description else None
+            if trans_description == "":
+                trans_description = None
+            
+            # Check if transaction exists in database (case-insensitive for bank_name and account_name)
+            # Also handle description comparison: match if both are None/empty or if stripped values match
             existing = db.query(Transaction).filter(
-                Transaction.bank_name == transaction.bank_name,
-                Transaction.account_name == transaction.account_name,
+                func.lower(Transaction.bank_name) == trans_bank_name,
+                func.lower(Transaction.account_name) == trans_account_name,
                 Transaction.date == transaction.date,
-                Transaction.amount == transaction.amount,
-                Transaction.description == transaction.description
+                Transaction.amount == transaction.amount
+            ).filter(
+                # Description match: either both are None/empty, or stripped values are equal
+                (Transaction.description == trans_description) |
+                (
+                    (Transaction.description == None) & (trans_description == None)
+                ) |
+                (
+                    (Transaction.description == "") & (trans_description == None)
+                ) |
+                (
+                    (Transaction.description == None) & (trans_description == "")
+                )
             ).first()
             
             if existing:
@@ -84,7 +108,6 @@ def detect_duplicates(
                     "transaction_type": transaction.transaction_type
                 })
             else:
-                # Transaction is new
                 new_transactions.append(transaction)
                 
         except Exception as e:
@@ -241,17 +264,6 @@ def harmonize_and_insert(
             raise
     else:
         logger.info("Skipping insertion (not confirmed or all duplicates)")
-    
-    # Log duplicates
-    for dup in duplicate_info_list:
-        logger.warning(
-            f"Skipping duplicate transaction - "
-            f"Bank: {dup['bank_name']}, "
-            f"Account: {dup['account_name']}, "
-            f"Date: {dup['date']}, "
-            f"Amount: {dup['amount']}, "
-            f"Description: {dup['description']}"
-        )
     
     logger.info(
         f"Harmonization complete - "
