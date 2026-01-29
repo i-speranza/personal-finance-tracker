@@ -47,13 +47,14 @@ class FileReader:
         try:
             if file_type == 'excel':
                 # Try reading all sheets, return first non-empty one
-                excel_file = pd.ExcelFile(file_path)
-                for sheet_name in excel_file.sheet_names:
-                    df = pd.read_excel(file_path, sheet_name=sheet_name, skiprows=skiprows, skipfooter=skipfooter)
-                    if not df.empty:
-                        logger.info(f"Read sheet '{sheet_name}' from {file_path.name}")
-                        return df
-                raise ValueError("No data found in Excel file")
+                # Use context manager to ensure file handle is properly closed
+                with pd.ExcelFile(file_path) as excel_file:
+                    for sheet_name in excel_file.sheet_names:
+                        df = pd.read_excel(excel_file, sheet_name=sheet_name, skiprows=skiprows, skipfooter=skipfooter)
+                        if not df.empty:
+                            logger.info(f"Read sheet '{sheet_name}' from {file_path.name}")
+                            return df
+                    raise ValueError("No data found in Excel file")
             else:  # CSV
                 # Try different encodings
                 encodings = ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']
