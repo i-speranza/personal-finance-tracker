@@ -303,6 +303,7 @@ export interface ParsedTransaction {
   category: string | null;
   transaction_type: string | null;
   is_special: boolean;
+  raw_data?: Record<string, unknown> | null;  // Original bank-specific row data
 }
 
 export interface PreprocessingResult {

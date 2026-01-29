@@ -142,7 +142,7 @@ class AllianzParser(BankTransactionsParser):
         description_col = "descrizione"  # Your bank's description column
         details_col = "dettagli"
         transaction_type_col = "tipo_transazione"
-        for _, row in df.iterrows():
+        for idx, row in df.iterrows():
             try:
                 # Extract and normalize
                 trans_date = self.normalize_date(row[date_col])
@@ -157,7 +157,8 @@ class AllianzParser(BankTransactionsParser):
                     "description": description,
                     "details": details,
                     "transaction_type": transaction_type,
-                    "is_special": False
+                    "is_special": False,
+                    "_raw_idx": idx  # Preserve original index for raw data matching
                 })
             except Exception as e:
                 # Log and skip invalid rows

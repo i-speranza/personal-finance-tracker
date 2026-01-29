@@ -1,6 +1,7 @@
 """Upload API endpoints for transaction file processing."""
 import shutil
 import logging
+import pandas as pd
 from pathlib import Path
 from datetime import date
 from typing import List, Optional, Any, Dict
@@ -16,6 +17,7 @@ from ..transactions_preprocessing import (
     StandardizedTransaction
 )
 from ..harmonization import detect_duplicates
+from ..raw_transactions import insert_intesa_raw_transaction, insert_allianz_raw_transaction
 
 # Import parsers to register them
 from ..transactions_preprocessing_intesa import IntesaParser
@@ -54,6 +56,7 @@ class ParsedTransaction(BaseModel):
     category: Optional[str] = None
     transaction_type: Optional[str] = None
     is_special: bool = False
+    raw_data: Optional[Dict[str, Any]] = None  # Original bank-specific row data
 
 
 class PreprocessingResult(BaseModel):
@@ -81,6 +84,7 @@ class TransactionToCommit(BaseModel):
     category: Optional[str] = None
     transaction_type: Optional[str] = None
     is_special: bool = False
+    raw_data: Optional[Dict[str, Any]] = None  # Original bank-specific row data
 
 
 class CommitRequest(BaseModel):
@@ -142,6 +146,8 @@ async def preprocess_file(
         # Parse file
         try:
             df = file_parser.parse_file(temp_path, bank_name=bank_name)
+            # Get raw DataFrame for storing raw data
+            raw_df = file_parser.get_raw_dataframe()
         except Exception as e:
             warnings.append(UploadWarning(
                 type="parsing_error",
@@ -185,14 +191,37 @@ async def preprocess_file(
             final_path.unlink()
         shutil.move(str(temp_path), str(final_path))
         
-        # Convert to list of ParsedTransaction
+        # Convert to list of ParsedTransaction with raw data
         transactions = []
+        
+        # Build a lookup for raw data by index
+        raw_data_lookup = {}
+        if raw_df is not None:
+            for idx, raw_row in raw_df.iterrows():
+                raw_row_dict = {}
+                for col in raw_df.columns:
+                    val = raw_row[col]
+                    # Convert pandas types to Python types for JSON serialization
+                    if hasattr(val, 'isoformat'):  # date/datetime
+                        raw_row_dict[col] = val.isoformat()
+                    elif hasattr(val, 'item'):  # numpy types
+                        raw_row_dict[col] = val.item()
+                    elif pd.isna(val):
+                        raw_row_dict[col] = None
+                    else:
+                        raw_row_dict[col] = val
+                raw_data_lookup[idx] = raw_row_dict
+        
         for _, row in df.iterrows():
             trans_date = row['date']
             if hasattr(trans_date, 'date'):
                 trans_date = trans_date.date()
             elif hasattr(trans_date, 'strftime'):
                 pass  # already a date
+            
+            # Get raw data for this transaction using _raw_idx preserved by the parser
+            raw_idx = row.get('_raw_idx')
+            raw_data = raw_data_lookup.get(raw_idx) if raw_idx is not None and raw_df is not None else None
             
             transactions.append(ParsedTransaction(
                 bank_name=str(row['bank_name']),
@@ -203,7 +232,8 @@ async def preprocess_file(
                 details=str(row['details']) if row.get('details') else None,
                 category=str(row['category']) if row.get('category') else None,
                 transaction_type=str(row['transaction_type']) if row.get('transaction_type') else None,
-                is_special=bool(row.get('is_special', False))
+                is_special=bool(row.get('is_special', False)),
+                raw_data=raw_data
             ))
         
         return PreprocessingResult(
@@ -244,6 +274,13 @@ async def harmonize_transactions(
             duplicate_transactions=[]
         )
     
+    # Build a lookup for raw_data using a composite key
+    # Key: (bank_name, account_name, date_str, amount, description)
+    raw_data_lookup = {}
+    for t in transactions:
+        key = (t.bank_name, t.account_name, str(t.date), t.amount, t.description)
+        raw_data_lookup[key] = t.raw_data
+    
     # Convert to StandardizedTransaction objects for detect_duplicates
     standardized = []
     for t in transactions:
@@ -262,9 +299,13 @@ async def harmonize_transactions(
     # Detect duplicates
     new_transactions_std, duplicate_info_list = detect_duplicates(db, standardized)
     
-    # Convert back to ParsedTransaction
+    # Convert back to ParsedTransaction, preserving raw_data
     new_transactions = []
     for t in new_transactions_std:
+        # Look up raw_data using composite key
+        key = (t.bank_name, t.account_name, str(t.date), t.amount, t.description)
+        raw_data = raw_data_lookup.get(key)
+        
         new_transactions.append(ParsedTransaction(
             bank_name=t.bank_name,
             account_name=t.account_name,
@@ -274,7 +315,8 @@ async def harmonize_transactions(
             details=t.details,
             category=t.category,
             transaction_type=t.transaction_type,
-            is_special=t.is_special
+            is_special=t.is_special,
+            raw_data=raw_data
         ))
     
     # Convert duplicates info to ParsedTransaction
@@ -306,7 +348,7 @@ async def commit_transactions(
     """
     Commit reviewed transactions to the database.
     
-    - Inserts all provided transactions
+    - Inserts all provided transactions and their raw data
     - Returns count of inserted transactions
     """
     if not request.transactions:
@@ -316,8 +358,10 @@ async def commit_transactions(
         )
     
     inserted_count = 0
+    raw_inserted_count = 0
     try:
         for t in request.transactions:
+            # Insert the main transaction
             db_transaction = Transaction(
                 bank_name=t.bank_name,
                 account_name=t.account_name,
@@ -330,13 +374,34 @@ async def commit_transactions(
                 is_special=t.is_special
             )
             db.add(db_transaction)
+            db.flush()  # Flush to get the transaction ID
             inserted_count += 1
+            
+            # Insert raw transaction data if available
+            if t.raw_data:
+                bank_name_lower = t.bank_name.lower().strip()
+                try:
+                    if bank_name_lower == "intesa" or bank_name_lower == "banca intesa":
+                        insert_intesa_raw_transaction(t.raw_data, db_transaction.id, db)
+                        raw_inserted_count += 1
+                    elif bank_name_lower == "allianz":
+                        insert_allianz_raw_transaction(t.raw_data, db_transaction.id, db)
+                        raw_inserted_count += 1
+                    else:
+                        logger.warning(f"No raw transaction handler for bank: {t.bank_name}")
+                except Exception as raw_err:
+                    logger.warning(f"Failed to insert raw transaction for transaction {db_transaction.id}: {raw_err}")
+                    # Continue without raw data - don't fail the whole commit
         
         db.commit()
         
+        message = f"Successfully committed {inserted_count} transactions"
+        if raw_inserted_count > 0:
+            message += f" with {raw_inserted_count} raw transaction records"
+        
         return CommitResult(
             inserted_count=inserted_count,
-            message=f"Successfully committed {inserted_count} transactions"
+            message=message
         )
     except Exception as e:
         db.rollback()
