@@ -1,13 +1,13 @@
 """Account API endpoints."""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func, distinct
+from sqlalchemy import func
 from typing import List, Optional
 from datetime import date
 from pydantic import BaseModel
 
 from ..database import get_db
-from ..models import Account, Transaction, AssetsHistory, AssetType
+from ..models import Account, Transaction, AssetsHistory
 from ..schemas import Account as AccountSchema, AccountCreate, AccountUpdate, AssetTypeEnum
 
 

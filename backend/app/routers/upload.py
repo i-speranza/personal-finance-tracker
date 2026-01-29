@@ -1,5 +1,4 @@
 """Upload API endpoints for transaction file processing."""
-import os
 import shutil
 import logging
 from pathlib import Path
@@ -11,12 +10,9 @@ from pydantic import BaseModel
 
 from ..database import get_db
 from ..models import Transaction
-from ..schemas import TransactionCreate
-from ..file_reader import FileReader
 from ..transactions_preprocessing import (
     TransactionsFileParser,
     get_transactions_parser_registry,
-    dataframe_to_list,
     StandardizedTransaction
 )
 from ..harmonization import detect_duplicates
@@ -142,11 +138,6 @@ async def preprocess_file(
         
         # Parse the file
         file_parser = TransactionsFileParser()
-        
-        # Capture warnings during parsing
-        import io
-        import sys
-        from contextlib import redirect_stderr, redirect_stdout
         
         # Parse file
         try:

@@ -463,8 +463,9 @@ async function loadAccountsWithDates() {
 async function loadAllAccountsForAssets() {
   loadingAllAccounts.value = true;
   try {
-    // Load ALL accounts for asset value input
-    allAccountsForAssets.value = await api.accounts.getAll();
+    // Load only active accounts for asset value input
+    const accounts = await api.accounts.getAll();
+    allAccountsForAssets.value = accounts.filter(a => a.status);
   } catch (e: any) {
     console.error('Failed to load all accounts:', e);
   } finally {
