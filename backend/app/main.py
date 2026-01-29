@@ -101,10 +101,11 @@ async def health_check():
 
 
 # Import routers
-from .routers import transactions, banks, accounts, assets_history, upload
+from .routers import transactions, banks, accounts, assets_history, upload, asset_types
 
 app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
 app.include_router(banks.router, prefix="/api/banks", tags=["banks"])
 app.include_router(accounts.router, prefix="/api/accounts", tags=["accounts"])
 app.include_router(assets_history.router, prefix="/api/assets-history", tags=["assets-history"])
 app.include_router(upload.router, prefix="/api/upload", tags=["upload"])
+app.include_router(asset_types.router, prefix="/api/asset-types", tags=["asset-types"])

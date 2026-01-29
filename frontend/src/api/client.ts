@@ -15,6 +15,7 @@ import type {
   InvestmentWithdrawalCreate,
   AssetsHistory,
   AssetsHistoryCreate,
+  AssetsHistoryUpdate,
   IntesaRawTransaction,
   IntesaRawTransactionCreate,
   AllianzRawTransaction,
@@ -24,6 +25,8 @@ import type {
   Account,
   AccountCreate,
   AccountUpdate,
+  AssetTypeRef,
+  AssetTypeRefCreate,
   ApiError as ApiErrorType,
   PaginatedResponse,
   // Upload workflow types
@@ -121,6 +124,10 @@ export const transactionsApi = {
     return request<void>(`/transactions/${id}`, {
       method: 'DELETE',
     });
+  },
+
+  getTypes: (): Promise<string[]> => {
+    return request<string[]>('/transactions/types');
   },
 };
 
@@ -280,7 +287,7 @@ export const assetsHistoryApi = {
     });
   },
 
-  update: (id: number, data: Partial<AssetsHistoryCreate>): Promise<AssetsHistory> => {
+  update: (id: number, data: AssetsHistoryUpdate): Promise<AssetsHistory> => {
     return request<AssetsHistory>(`/assets-history/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -354,6 +361,26 @@ export const accountsApi = {
   },
 };
 
+// Asset Types API
+export const assetTypesApi = {
+  getAll: (): Promise<AssetTypeRef[]> => {
+    return request<AssetTypeRef[]>('/asset-types');
+  },
+
+  create: (data: AssetTypeRefCreate): Promise<AssetTypeRef> => {
+    return request<AssetTypeRef>('/asset-types', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  delete: (id: number): Promise<void> => {
+    return request<void>(`/asset-types/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
 // Upload API
 export const uploadApi = {
   preprocess: async (
@@ -408,5 +435,6 @@ export const api = {
   assetsHistory: assetsHistoryApi,
   banks: banksApi,
   accounts: accountsApi,
+  assetTypes: assetTypesApi,
   upload: uploadApi,
 };

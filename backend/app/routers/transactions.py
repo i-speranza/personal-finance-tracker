@@ -55,6 +55,16 @@ async def get_transactions(
     return transactions
 
 
+@router.get("/types", response_model=List[str])
+async def get_transaction_types(db: Session = Depends(get_db)):
+    """Get all distinct transaction types."""
+    result = db.query(Transaction.transaction_type).distinct().filter(
+        Transaction.transaction_type.isnot(None),
+        Transaction.transaction_type != ""
+    ).order_by(Transaction.transaction_type).all()
+    return [r[0] for r in result]
+
+
 @router.get("/{transaction_id}", response_model=TransactionSchema)
 async def get_transaction(
     transaction_id: int,

@@ -4,7 +4,7 @@
     <nav>
       <router-link to="/">Dashboard</router-link>
       <router-link to="/upload">Upload</router-link>
-      <router-link to="/edit">Edit</router-link>
+      <router-link to="/edit">Data Management</router-link>
     </nav>
     <main>
       <router-view />

@@ -15,6 +15,19 @@ export enum AssetType {
   INVESTMENT = 'investment',
 }
 
+// Asset Type Reference (dynamic asset types)
+export interface AssetTypeRef {
+  id: number;
+  name: string;
+  display_name: string;
+  created_at: string;
+}
+
+export interface AssetTypeRefCreate {
+  name: string;
+  display_name: string;
+}
+
 // Transaction Types
 export interface Transaction {
   id: number;
@@ -170,6 +183,10 @@ export interface AssetsHistoryCreate {
   asset_type: AssetType;
   date: string;
   amount: number;
+}
+
+export interface AssetsHistoryUpdate {
+  amount?: number;
 }
 
 // Raw Transaction Types

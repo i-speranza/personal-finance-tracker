@@ -1,6 +1,6 @@
 """Pydantic schemas for request/response validation."""
-from pydantic import BaseModel, Field
-from typing import Optional, List
+from pydantic import BaseModel
+from typing import Optional
 from datetime import date, datetime
 from enum import Enum
 
@@ -21,6 +21,27 @@ class AssetTypeEnum(str, Enum):
     """Asset type enumeration."""
     CASH = "cash"
     INVESTMENT = "investment"
+
+
+# Asset Type Reference Schemas
+class AssetTypeRefBase(BaseModel):
+    """Base asset type reference schema."""
+    name: str
+    display_name: str
+
+
+class AssetTypeRefCreate(AssetTypeRefBase):
+    """Schema for creating an asset type."""
+    pass
+
+
+class AssetTypeRef(AssetTypeRefBase):
+    """Schema for asset type response."""
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 # Transaction Schemas
@@ -199,6 +220,11 @@ class AssetsHistoryBase(BaseModel):
 class AssetsHistoryCreate(AssetsHistoryBase):
     """Schema for creating an assets history entry."""
     pass
+
+
+class AssetsHistoryUpdate(BaseModel):
+    """Schema for updating an assets history entry."""
+    amount: Optional[float] = None
 
 
 class AssetsHistory(AssetsHistoryBase):

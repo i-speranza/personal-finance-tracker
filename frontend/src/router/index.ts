@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import Dashboard from '@/views/Dashboard.vue';
-import Edit from '@/views/Edit.vue';
+import DataManagement from '@/views/DataManagement.vue';
 import Upload from '@/views/Upload.vue';
 
 const router = createRouter({
@@ -13,8 +13,8 @@ const router = createRouter({
     },
     {
       path: '/edit',
-      name: 'Edit',
-      component: Edit,
+      name: 'DataManagement',
+      component: DataManagement,
     },
     {
       path: '/upload',

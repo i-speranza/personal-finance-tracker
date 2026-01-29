@@ -24,6 +24,16 @@ class AssetType(str, enum.Enum):
     INVESTMENT = "investment"
 
 
+class AssetTypeRef(Base):
+    """Dynamic asset type reference table."""
+    __tablename__ = "asset_types"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False, index=True)  # e.g., "cash", "investment", "crypto"
+    display_name = Column(String, nullable=False)  # e.g., "Cash", "Investment", "Crypto"
+    created_at = Column(DateTime, default=func.now())
+
+
 class Bank(Base):
     """Bank reference table."""
     __tablename__ = "banks"

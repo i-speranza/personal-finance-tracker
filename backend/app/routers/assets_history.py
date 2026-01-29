@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from ..database import get_db
 from ..models import AssetsHistory
-from ..schemas import AssetsHistory as AssetsHistorySchema, AssetsHistoryCreate
+from ..schemas import AssetsHistory as AssetsHistorySchema, AssetsHistoryCreate, AssetsHistoryUpdate
 
 
 class BulkAssetsHistoryCreate(BaseModel):
@@ -119,7 +119,7 @@ async def create_bulk_asset_history(
 @router.put("/{asset_id}", response_model=AssetsHistorySchema)
 async def update_asset_history(
     asset_id: int,
-    asset_update: AssetsHistoryCreate,
+    asset_update: AssetsHistoryUpdate,
     db: Session = Depends(get_db),
 ):
     """Update an existing assets history entry."""
@@ -127,8 +127,8 @@ async def update_asset_history(
     if not db_asset:
         raise HTTPException(status_code=404, detail="Assets history entry not found")
     
-    # Update all fields
-    update_data = asset_update.dict()
+    # Update only provided fields
+    update_data = asset_update.dict(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_asset, field, value)
     
