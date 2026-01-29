@@ -103,9 +103,45 @@
         <canvas ref="scatterChartRef"></canvas>
       </div>
       
-      <div class="chart-container">
-        <h3>Monthly Income, Expenses, and Balance</h3>
-        <canvas ref="monthlyChartRef"></canvas>
+      <div class="chart-with-table">
+        <div class="chart-container chart-container-flex">
+          <h3>Monthly Income, Expenses, and Balance</h3>
+          <canvas ref="monthlyChartRef"></canvas>
+        </div>
+        
+        <div class="monthly-table-container">
+          <h3>Last 12 Months (in thousands)</h3>
+          <table class="monthly-table">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>Income</th>
+                <th>Expenses</th>
+                <th>Balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in monthlyTableData" :key="row.month">
+                <td>{{ row.month }}</td>
+                <td class="income">{{ formatThousands(row.income) }}</td>
+                <td class="expenses">{{ formatThousands(row.expenses) }}</td>
+                <td :class="{ 'positive': row.balance >= 0, 'negative': row.balance < 0 }">
+                  {{ formatThousands(row.balance) }}
+                </td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr class="average-row">
+                <td><strong>Average</strong></td>
+                <td class="income"><strong>{{ formatThousands(monthlyAverages.income) }}</strong></td>
+                <td class="expenses"><strong>{{ formatThousands(monthlyAverages.expenses) }}</strong></td>
+                <td :class="{ 'positive': monthlyAverages.balance >= 0, 'negative': monthlyAverages.balance < 0 }">
+                  <strong>{{ formatThousands(monthlyAverages.balance) }}</strong>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
       
       <div class="chart-container">
@@ -113,16 +149,59 @@
         <canvas ref="cumulativeChartRef"></canvas>
       </div>
       
-      <div class="chart-container">
-        <h3>Assets History</h3>
-        <canvas ref="assetsHistoryChartRef"></canvas>
+      <div class="chart-with-table">
+        <div class="chart-container chart-container-flex">
+          <h3>Assets History</h3>
+          <canvas ref="assetsHistoryChartRef"></canvas>
+        </div>
+        
+        <div class="assets-table-container">
+          <h3>Assets Comparison (in thousands)</h3>
+          <table class="assets-table">
+            <thead>
+              <tr>
+                <th>Asset</th>
+                <th>Previous</th>
+                <th>Last</th>
+                <th>Diff</th>
+                <th>%</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in assetsComparisonData" :key="row.assetName">
+                <td class="asset-name">{{ row.assetName }}</td>
+                <td>{{ formatThousands(row.previousValue) }}</td>
+                <td>{{ formatThousands(row.lastValue) }}</td>
+                <td :class="{ 'positive': row.absoluteDiff >= 0, 'negative': row.absoluteDiff < 0 }">
+                  {{ row.absoluteDiff >= 0 ? '+' : '' }}{{ formatThousands(row.absoluteDiff) }}
+                </td>
+                <td :class="{ 'positive': row.percentDiff >= 0, 'negative': row.percentDiff < 0 }">
+                  {{ row.percentDiff >= 0 ? '+' : '' }}{{ formatPercent(row.percentDiff) }}%
+                </td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr class="total-row">
+                <td><strong>Total</strong></td>
+                <td><strong>{{ formatThousands(assetsTotalComparison.previousValue) }}</strong></td>
+                <td><strong>{{ formatThousands(assetsTotalComparison.lastValue) }}</strong></td>
+                <td :class="{ 'positive': assetsTotalComparison.absoluteDiff >= 0, 'negative': assetsTotalComparison.absoluteDiff < 0 }">
+                  <strong>{{ assetsTotalComparison.absoluteDiff >= 0 ? '+' : '' }}{{ formatThousands(assetsTotalComparison.absoluteDiff) }}</strong>
+                </td>
+                <td :class="{ 'positive': assetsTotalComparison.percentDiff >= 0, 'negative': assetsTotalComparison.percentDiff < 0 }">
+                  <strong>{{ assetsTotalComparison.percentDiff >= 0 ? '+' : '' }}{{ formatPercent(assetsTotalComparison.percentDiff) }}%</strong>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { Chart, registerables } from 'chart.js';
 import zoomPlugin from 'chartjs-plugin-zoom';
 import { format, parseISO, startOfMonth } from 'date-fns';
@@ -383,6 +462,153 @@ function calculateCumulative(transactions: Transaction[]) {
   return data;
 }
 
+// Computed property for last 12 months table data
+const monthlyTableData = computed(() => {
+  const aggregates = calculateMonthlyAggregates(filteredTransactions.value);
+  // Get last 12 months (or fewer if not enough data)
+  const last12 = aggregates.slice(-12);
+  
+  return last12.map(a => ({
+    month: a.month,
+    income: a.income / 1000,
+    expenses: Math.abs(a.expenses) / 1000, // expenses is negative, make positive for display
+    balance: a.balance / 1000,
+  }));
+});
+
+// Computed property for averages of last 12 months
+const monthlyAverages = computed(() => {
+  const data = monthlyTableData.value;
+  if (data.length === 0) {
+    return { income: 0, expenses: 0, balance: 0 };
+  }
+  
+  const sumIncome = data.reduce((sum, d) => sum + d.income, 0);
+  const sumExpenses = data.reduce((sum, d) => sum + d.expenses, 0);
+  const sumBalance = data.reduce((sum, d) => sum + d.balance, 0);
+  
+  return {
+    income: sumIncome / data.length,
+    expenses: sumExpenses / data.length,
+    balance: sumBalance / data.length,
+  };
+});
+
+// Format number to 1 decimal place
+function formatThousands(value: number): string {
+  return value.toFixed(1);
+}
+
+// Format percentage to 1 decimal place
+function formatPercent(value: number): string {
+  return value.toFixed(1);
+}
+
+// Computed property for assets comparison table (last 2 values per asset)
+const assetsComparisonData = computed(() => {
+  if (!assetsHistory.value || assetsHistory.value.length === 0) {
+    return [];
+  }
+  
+  // Group assets by account_name (or bank_name + account_name for uniqueness)
+  const assetMap = new Map<string, { date: number; amount: number }[]>();
+  
+  assetsHistory.value.forEach(asset => {
+    const assetKey = `${asset.bank_name} - ${asset.account_name}`;
+    
+    if (!assetMap.has(assetKey)) {
+      assetMap.set(assetKey, []);
+    }
+    
+    assetMap.get(assetKey)!.push({
+      date: parseISO(asset.date).getTime(),
+      amount: asset.amount,
+    });
+  });
+  
+  // Sort each asset's data by date
+  assetMap.forEach((data) => {
+    data.sort((a, b) => a.date - b.date);
+  });
+  
+  // Find the latest observation date across all assets
+  let latestDate = 0;
+  assetMap.forEach((data) => {
+    if (data.length > 0) {
+      const assetLastDate = data[data.length - 1].date;
+      if (assetLastDate > latestDate) {
+        latestDate = assetLastDate;
+      }
+    }
+  });
+  
+  // Extract last 2 values for each asset (only if asset exists at latest date)
+  const result: {
+    assetName: string;
+    previousValue: number;
+    lastValue: number;
+    absoluteDiff: number;
+    percentDiff: number;
+  }[] = [];
+  
+  assetMap.forEach((data, assetKey) => {
+    // Skip assets that don't have data at the latest observation date
+    if (data.length === 0 || data[data.length - 1].date !== latestDate) {
+      return;
+    }
+    
+    if (data.length >= 2) {
+      const previousValue = data[data.length - 2].amount;
+      const lastValue = data[data.length - 1].amount;
+      const absoluteDiff = lastValue - previousValue;
+      const percentDiff = previousValue !== 0 ? ((lastValue - previousValue) / Math.abs(previousValue)) * 100 : 0;
+      
+      result.push({
+        assetName: assetKey,
+        previousValue: previousValue / 1000,
+        lastValue: lastValue / 1000,
+        absoluteDiff: absoluteDiff / 1000,
+        percentDiff,
+      });
+    } else if (data.length === 1) {
+      // Only one data point available
+      const lastValue = data[data.length - 1].amount;
+      result.push({
+        assetName: assetKey,
+        previousValue: 0,
+        lastValue: lastValue / 1000,
+        absoluteDiff: lastValue / 1000,
+        percentDiff: 0,
+      });
+    }
+  });
+  
+  // Sort by asset name
+  result.sort((a, b) => a.assetName.localeCompare(b.assetName));
+  
+  return result;
+});
+
+// Computed property for assets total comparison
+const assetsTotalComparison = computed(() => {
+  const data = assetsComparisonData.value;
+  if (data.length === 0) {
+    return { previousValue: 0, lastValue: 0, absoluteDiff: 0, percentDiff: 0 };
+  }
+  
+  const totalPrevious = data.reduce((sum, d) => sum + d.previousValue, 0);
+  const totalLast = data.reduce((sum, d) => sum + d.lastValue, 0);
+  const absoluteDiff = totalLast - totalPrevious;
+  const percentDiff = totalPrevious !== 0 ? ((totalLast - totalPrevious) / Math.abs(totalPrevious)) * 100 : 0;
+  
+  return {
+    previousValue: totalPrevious,
+    lastValue: totalLast,
+    absoluteDiff,
+    percentDiff,
+  };
+});
+
 // Fetch assets history from API
 async function fetchAssetsHistory() {
   try {
@@ -518,9 +744,6 @@ function updateAssetsHistoryChart() {
     tension: 0.1,
     fill: false,
     borderWidth: 3, // Thicker line
-    pointRadius: 4, // Show dots on the line
-    pointBackgroundColor: 'rgba(0, 100, 0, 1)', // Dark green dots
-    pointBorderColor: 'rgba(0, 100, 0, 1)',
   });
   
   // Create new chart
@@ -1155,6 +1378,181 @@ h3 {
 
 .chart-container canvas {
   max-height: 400px;
+}
+
+.chart-with-table {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.chart-container-flex {
+  flex: 1;
+  min-width: 0;
+}
+
+.monthly-table-container {
+  background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  min-width: 320px;
+  max-width: 400px;
+}
+
+.monthly-table-container h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 1.1em;
+}
+
+.monthly-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.monthly-table th,
+.monthly-table td {
+  padding: 8px 10px;
+  text-align: right;
+  border-bottom: 1px solid #eee;
+}
+
+.monthly-table th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  color: #333;
+}
+
+.monthly-table th:first-child,
+.monthly-table td:first-child {
+  text-align: left;
+}
+
+.monthly-table tbody tr:hover {
+  background-color: #f5f5f5;
+}
+
+.monthly-table .income {
+  color: rgba(75, 192, 192, 1);
+}
+
+.monthly-table .expenses {
+  color: rgba(255, 99, 132, 1);
+}
+
+.monthly-table .positive {
+  color: rgba(54, 162, 235, 1);
+}
+
+.monthly-table .negative {
+  color: rgba(255, 99, 132, 1);
+}
+
+.monthly-table tfoot {
+  border-top: 2px solid #ddd;
+}
+
+.monthly-table .average-row {
+  background-color: #f8f9fa;
+}
+
+.monthly-table .average-row td {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.assets-table-container {
+  background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  min-width: 400px;
+  max-width: 500px;
+  max-height: 450px;
+  overflow-y: auto;
+}
+
+.assets-table-container h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 1.1em;
+}
+
+.assets-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85em;
+}
+
+.assets-table th,
+.assets-table td {
+  padding: 6px 8px;
+  text-align: right;
+  border-bottom: 1px solid #eee;
+}
+
+.assets-table th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  color: #333;
+  position: sticky;
+  top: 0;
+}
+
+.assets-table th:first-child,
+.assets-table td:first-child {
+  text-align: left;
+}
+
+.assets-table .asset-name {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assets-table tbody tr:hover {
+  background-color: #f5f5f5;
+}
+
+.assets-table .positive {
+  color: #28a745;
+}
+
+.assets-table .negative {
+  color: rgba(255, 99, 132, 1);
+}
+
+.assets-table tfoot {
+  border-top: 2px solid #ddd;
+}
+
+.assets-table .total-row {
+  background-color: #f8f9fa;
+}
+
+.assets-table .total-row td {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+@media (max-width: 1200px) {
+  .chart-with-table {
+    flex-direction: column;
+  }
+  
+  .monthly-table-container {
+    width: 100%;
+    max-width: none;
+  }
+  
+  .assets-table-container {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+  }
 }
 
 @media (max-width: 768px) {
