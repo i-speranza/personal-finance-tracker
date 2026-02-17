@@ -425,6 +425,25 @@ export const uploadApi = {
   },
 };
 
+// Raw Transactions API
+export const rawTransactionsApi = {
+  getIntesa: (): Promise<IntesaRawTransaction[]> => {
+    return request<IntesaRawTransaction[]>('/raw-transactions/intesa');
+  },
+
+  getAllianz: (): Promise<AllianzRawTransaction[]> => {
+    return request<AllianzRawTransaction[]>('/raw-transactions/allianz');
+  },
+
+  getIntesaCount: (): Promise<{ count: number }> => {
+    return request<{ count: number }>('/raw-transactions/intesa/count');
+  },
+
+  getAllianzCount: (): Promise<{ count: number }> => {
+    return request<{ count: number }>('/raw-transactions/allianz/count');
+  },
+};
+
 // Export all APIs
 export const api = {
   transactions: transactionsApi,
@@ -437,4 +456,5 @@ export const api = {
   accounts: accountsApi,
   assetTypes: assetTypesApi,
   upload: uploadApi,
+  rawTransactions: rawTransactionsApi,
 };

@@ -618,6 +618,327 @@
           </div>
         </div>
       </div>
+      
+      <!-- Raw Bank Tables Tab -->
+      <div v-if="activeTab === 'rawBankTables'" class="tab-panel">
+        <div class="panel-header">
+          <h3>Raw Bank Tables</h3>
+        </div>
+        
+        <!-- Sub-tabs for different banks -->
+        <div class="sub-tabs">
+          <button 
+            :class="['sub-tab-btn', { active: rawBankSubTab === 'intesa' }]"
+            @click="rawBankSubTab = 'intesa'"
+          >
+            Intesa ({{ intesaRawTransactions.length }})
+          </button>
+          <button 
+            :class="['sub-tab-btn', { active: rawBankSubTab === 'allianz' }]"
+            @click="rawBankSubTab = 'allianz'"
+          >
+            Allianz ({{ allianzRawTransactions.length }})
+          </button>
+        </div>
+        
+        <!-- Intesa Raw Transactions -->
+        <div v-if="rawBankSubTab === 'intesa'" class="sub-tab-content">
+          <div v-if="intesaLoading" class="loading">Loading Intesa raw transactions...</div>
+          <div v-else-if="intesaError" class="error">{{ intesaError }}</div>
+          <template v-else>
+            <div class="table-info">
+              <span>
+                Showing {{ intesaTable.getRowModel().rows.length }} of {{ intesaRawTransactions.length }} records
+                <template v-if="intesaTable.getFilteredRowModel().rows.length !== intesaRawTransactions.length">
+                  ({{ intesaTable.getFilteredRowModel().rows.length }} filtered)
+                </template>
+              </span>
+              <div class="table-info-actions">
+                <button 
+                  class="btn btn-outline btn-sm"
+                  @click="exportIntesaToCSV"
+                  title="Export filtered data to CSV"
+                >
+                  Export CSV
+                </button>
+                <button 
+                  class="btn btn-secondary btn-sm"
+                  @click="clearIntesaFilters"
+                  v-if="intesaColumnFilters.length > 0"
+                >
+                  Clear Filters
+                </button>
+              </div>
+            </div>
+            
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th 
+                      v-for="header in intesaTable.getHeaderGroups()[0].headers" 
+                      :key="header.id"
+                      :class="{ sortable: header.column.getCanSort() }"
+                      @click="header.column.getCanSort() ? header.column.toggleSorting() : null"
+                    >
+                      <div class="th-content">
+                        <span>{{ header.column.columnDef.header }}</span>
+                        <span v-if="header.column.getIsSorted()" class="sort-indicator">
+                          {{ header.column.getIsSorted() === 'asc' ? '↑' : '↓' }}
+                        </span>
+                      </div>
+                    </th>
+                  </tr>
+                  <tr class="filter-row">
+                    <th v-for="header in intesaTable.getHeaderGroups()[0].headers" :key="header.id + '-filter'">
+                      <!-- Date filter -->
+                      <template v-if="header.column.id === 'data'">
+                        <input 
+                          type="date" 
+                          :value="(header.column.getFilterValue() as string) ?? ''"
+                          @input="header.column.setFilterValue(($event.target as HTMLInputElement).value || undefined)"
+                          class="filter-input filter-date"
+                        />
+                      </template>
+                      <!-- Text filters -->
+                      <template v-else-if="['operazione', 'dettagli', 'categoria', 'conto_o_carta'].includes(header.column.id)">
+                        <input 
+                          type="text" 
+                          :value="(header.column.getFilterValue() as string) ?? ''"
+                          @input="header.column.setFilterValue(($event.target as HTMLInputElement).value || undefined)"
+                          class="filter-input"
+                          placeholder="Search..."
+                        />
+                      </template>
+                      <!-- No filter for other columns -->
+                      <template v-else>
+                        <span class="filter-placeholder">-</span>
+                      </template>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in intesaTable.getRowModel().rows" :key="row.original.id">
+                    <td>{{ row.original.data }}</td>
+                    <td class="description-cell" :title="row.original.operazione || ''">
+                      {{ truncate(row.original.operazione || '-', 30) }}
+                    </td>
+                    <td class="description-cell" :title="row.original.dettagli || ''">
+                      {{ truncate(row.original.dettagli || '-', 40) }}
+                    </td>
+                    <td>{{ row.original.conto_o_carta || '-' }}</td>
+                    <td>{{ row.original.contabilizzazione || '-' }}</td>
+                    <td>{{ row.original.categoria || '-' }}</td>
+                    <td>{{ row.original.valuta || '-' }}</td>
+                    <td :class="row.original.importo >= 0 ? 'positive' : 'negative'">
+                      {{ formatAmount(row.original.importo) }}
+                    </td>
+                    <td>{{ row.original.transaction_id || '-' }}</td>
+                  </tr>
+                  <tr v-if="intesaTable.getRowModel().rows.length === 0">
+                    <td colspan="9" class="no-results">No Intesa raw transactions found</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <!-- Pagination -->
+            <div class="pagination">
+              <div class="pagination-info">
+                <select 
+                  :value="intesaTable.getState().pagination.pageSize"
+                  @change="intesaTable.setPageSize(Number(($event.target as HTMLSelectElement).value))"
+                  class="page-size-select"
+                >
+                  <option :value="25">25 per page</option>
+                  <option :value="50">50 per page</option>
+                  <option :value="100">100 per page</option>
+                  <option :value="250">250 per page</option>
+                </select>
+              </div>
+              <div class="pagination-controls">
+                <button 
+                  class="btn btn-secondary btn-sm"
+                  @click="intesaTable.setPageIndex(0)"
+                  :disabled="!intesaTable.getCanPreviousPage()"
+                >
+                  First
+                </button>
+                <button 
+                  class="btn btn-secondary btn-sm"
+                  @click="intesaTable.previousPage()"
+                  :disabled="!intesaTable.getCanPreviousPage()"
+                >
+                  Previous
+                </button>
+                <span class="page-info">
+                  Page {{ intesaTable.getState().pagination.pageIndex + 1 }} of {{ intesaTable.getPageCount() }}
+                </span>
+                <button 
+                  class="btn btn-secondary btn-sm"
+                  @click="intesaTable.nextPage()"
+                  :disabled="!intesaTable.getCanNextPage()"
+                >
+                  Next
+                </button>
+                <button 
+                  class="btn btn-secondary btn-sm"
+                  @click="intesaTable.setPageIndex(intesaTable.getPageCount() - 1)"
+                  :disabled="!intesaTable.getCanNextPage()"
+                >
+                  Last
+                </button>
+              </div>
+            </div>
+          </template>
+        </div>
+        
+        <!-- Allianz Raw Transactions -->
+        <div v-if="rawBankSubTab === 'allianz'" class="sub-tab-content">
+          <div v-if="allianzLoading" class="loading">Loading Allianz raw transactions...</div>
+          <div v-else-if="allianzError" class="error">{{ allianzError }}</div>
+          <template v-else>
+            <div class="table-info">
+              <span>
+                Showing {{ allianzTable.getRowModel().rows.length }} of {{ allianzRawTransactions.length }} records
+                <template v-if="allianzTable.getFilteredRowModel().rows.length !== allianzRawTransactions.length">
+                  ({{ allianzTable.getFilteredRowModel().rows.length }} filtered)
+                </template>
+              </span>
+              <div class="table-info-actions">
+                <button 
+                  class="btn btn-outline btn-sm"
+                  @click="exportAllianzToCSV"
+                  title="Export filtered data to CSV"
+                >
+                  Export CSV
+                </button>
+                <button 
+                  class="btn btn-secondary btn-sm"
+                  @click="clearAllianzFilters"
+                  v-if="allianzColumnFilters.length > 0"
+                >
+                  Clear Filters
+                </button>
+              </div>
+            </div>
+            
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th 
+                      v-for="header in allianzTable.getHeaderGroups()[0].headers" 
+                      :key="header.id"
+                      :class="{ sortable: header.column.getCanSort() }"
+                      @click="header.column.getCanSort() ? header.column.toggleSorting() : null"
+                    >
+                      <div class="th-content">
+                        <span>{{ header.column.columnDef.header }}</span>
+                        <span v-if="header.column.getIsSorted()" class="sort-indicator">
+                          {{ header.column.getIsSorted() === 'asc' ? '↑' : '↓' }}
+                        </span>
+                      </div>
+                    </th>
+                  </tr>
+                  <tr class="filter-row">
+                    <th v-for="header in allianzTable.getHeaderGroups()[0].headers" :key="header.id + '-filter'">
+                      <!-- Date filter -->
+                      <template v-if="header.column.id === 'data_contabile'">
+                        <input 
+                          type="date" 
+                          :value="(header.column.getFilterValue() as string) ?? ''"
+                          @input="header.column.setFilterValue(($event.target as HTMLInputElement).value || undefined)"
+                          class="filter-input filter-date"
+                        />
+                      </template>
+                      <!-- Text filter for description -->
+                      <template v-else-if="header.column.id === 'descrizione'">
+                        <input 
+                          type="text" 
+                          :value="(header.column.getFilterValue() as string) ?? ''"
+                          @input="header.column.setFilterValue(($event.target as HTMLInputElement).value || undefined)"
+                          class="filter-input"
+                          placeholder="Search..."
+                        />
+                      </template>
+                      <!-- No filter for other columns -->
+                      <template v-else>
+                        <span class="filter-placeholder">-</span>
+                      </template>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in allianzTable.getRowModel().rows" :key="row.original.id">
+                    <td>{{ row.original.data_contabile }}</td>
+                    <td>{{ row.original.data_valuta || '-' }}</td>
+                    <td class="description-cell" :title="row.original.descrizione || ''">
+                      {{ truncate(row.original.descrizione || '-', 50) }}
+                    </td>
+                    <td :class="row.original.importo >= 0 ? 'positive' : 'negative'">
+                      {{ formatAmount(row.original.importo) }}
+                    </td>
+                    <td>{{ row.original.transaction_id || '-' }}</td>
+                  </tr>
+                  <tr v-if="allianzTable.getRowModel().rows.length === 0">
+                    <td colspan="5" class="no-results">No Allianz raw transactions found</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <!-- Pagination -->
+            <div class="pagination">
+              <div class="pagination-info">
+                <select 
+                  :value="allianzTable.getState().pagination.pageSize"
+                  @change="allianzTable.setPageSize(Number(($event.target as HTMLSelectElement).value))"
+                  class="page-size-select"
+                >
+                  <option :value="25">25 per page</option>
+                  <option :value="50">50 per page</option>
+                  <option :value="100">100 per page</option>
+                  <option :value="250">250 per page</option>
+                </select>
+              </div>
+              <div class="pagination-controls">
+                <button 
+                  class="btn btn-secondary btn-sm"
+                  @click="allianzTable.setPageIndex(0)"
+                  :disabled="!allianzTable.getCanPreviousPage()"
+                >
+                  First
+                </button>
+                <button 
+                  class="btn btn-secondary btn-sm"
+                  @click="allianzTable.previousPage()"
+                  :disabled="!allianzTable.getCanPreviousPage()"
+                >
+                  Previous
+                </button>
+                <span class="page-info">
+                  Page {{ allianzTable.getState().pagination.pageIndex + 1 }} of {{ allianzTable.getPageCount() }}
+                </span>
+                <button 
+                  class="btn btn-secondary btn-sm"
+                  @click="allianzTable.nextPage()"
+                  :disabled="!allianzTable.getCanNextPage()"
+                >
+                  Next
+                </button>
+                <button 
+                  class="btn btn-secondary btn-sm"
+                  @click="allianzTable.setPageIndex(allianzTable.getPageCount() - 1)"
+                  :disabled="!allianzTable.getCanNextPage()"
+                >
+                  Last
+                </button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -625,7 +946,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { api } from '@/api/client';
-import type { Account, Bank, Transaction, AssetsHistory, AssetTypeRef } from '@/types';
+import type { Account, Bank, Transaction, AssetsHistory, AssetTypeRef, IntesaRawTransaction, AllianzRawTransaction } from '@/types';
 import {
   useVueTable,
   getCoreRowModel,
@@ -644,6 +965,7 @@ const tabs = [
   { id: 'assetTypes', label: 'Asset Types' },
   { id: 'transactions', label: 'Transactions' },
   { id: 'assetsHistory', label: 'Assets History' },
+  { id: 'rawBankTables', label: 'Raw Bank Tables' },
 ];
 const activeTab = ref('accounts');
 
@@ -1222,6 +1544,197 @@ async function saveAssetsChanges() {
   await fetchAssetsHistory();
 }
 
+// ============ RAW BANK TABLES TAB ============
+const rawBankSubTab = ref<'intesa' | 'allianz'>('intesa');
+
+// Intesa Raw Transactions
+const intesaRawTransactions = ref<IntesaRawTransaction[]>([]);
+const intesaLoading = ref(false);
+const intesaError = ref<string | null>(null);
+
+// Allianz Raw Transactions
+const allianzRawTransactions = ref<AllianzRawTransaction[]>([]);
+const allianzLoading = ref(false);
+const allianzError = ref<string | null>(null);
+
+// TanStack Table state for Intesa
+const intesaColumnFilters = ref<ColumnFiltersState>([]);
+const intesaSorting = ref<SortingState>([{ id: 'data', desc: true }]);
+
+// Custom filter for Intesa date
+const intesaDateFilterFn: FilterFn<IntesaRawTransaction> = (row, columnId, filterValue) => {
+  if (!filterValue) return true;
+  const rowDate = row.getValue(columnId) as string;
+  return rowDate.startsWith(filterValue);
+};
+
+// Column helper for Intesa
+const intesaColumnHelper = createColumnHelper<IntesaRawTransaction>();
+
+const intesaColumns = [
+  intesaColumnHelper.accessor('data', {
+    header: 'Data',
+    filterFn: intesaDateFilterFn,
+  }),
+  intesaColumnHelper.accessor('operazione', {
+    header: 'Operazione',
+    filterFn: 'includesString',
+  }),
+  intesaColumnHelper.accessor('dettagli', {
+    header: 'Dettagli',
+    filterFn: 'includesString',
+  }),
+  intesaColumnHelper.accessor('conto_o_carta', {
+    header: 'Conto/Carta',
+    filterFn: 'includesString',
+  }),
+  intesaColumnHelper.accessor('contabilizzazione', {
+    header: 'Contab.',
+    enableColumnFilter: false,
+  }),
+  intesaColumnHelper.accessor('categoria', {
+    header: 'Categoria',
+    filterFn: 'includesString',
+  }),
+  intesaColumnHelper.accessor('valuta', {
+    header: 'Valuta',
+    enableColumnFilter: false,
+  }),
+  intesaColumnHelper.accessor('importo', {
+    header: 'Importo',
+    enableColumnFilter: false,
+  }),
+  intesaColumnHelper.accessor('transaction_id', {
+    header: 'Tx ID',
+    enableColumnFilter: false,
+    enableSorting: false,
+  }),
+];
+
+// TanStack Table for Intesa
+const intesaTable = useVueTable({
+  get data() { return intesaRawTransactions.value; },
+  columns: intesaColumns,
+  state: {
+    get columnFilters() { return intesaColumnFilters.value; },
+    get sorting() { return intesaSorting.value; },
+  },
+  onColumnFiltersChange: (updater) => {
+    intesaColumnFilters.value = typeof updater === 'function' 
+      ? updater(intesaColumnFilters.value) 
+      : updater;
+  },
+  onSortingChange: (updater) => {
+    intesaSorting.value = typeof updater === 'function' 
+      ? updater(intesaSorting.value) 
+      : updater;
+  },
+  getCoreRowModel: getCoreRowModel(),
+  getFilteredRowModel: getFilteredRowModel(),
+  getSortedRowModel: getSortedRowModel(),
+  getPaginationRowModel: getPaginationRowModel(),
+  initialState: {
+    pagination: { pageSize: 50 },
+  },
+});
+
+function clearIntesaFilters() {
+  intesaColumnFilters.value = [];
+}
+
+// TanStack Table state for Allianz
+const allianzColumnFilters = ref<ColumnFiltersState>([]);
+const allianzSorting = ref<SortingState>([{ id: 'data_contabile', desc: true }]);
+
+// Custom filter for Allianz date
+const allianzDateFilterFn: FilterFn<AllianzRawTransaction> = (row, columnId, filterValue) => {
+  if (!filterValue) return true;
+  const rowDate = row.getValue(columnId) as string;
+  return rowDate.startsWith(filterValue);
+};
+
+// Column helper for Allianz
+const allianzColumnHelper = createColumnHelper<AllianzRawTransaction>();
+
+const allianzColumns = [
+  allianzColumnHelper.accessor('data_contabile', {
+    header: 'Data Contabile',
+    filterFn: allianzDateFilterFn,
+  }),
+  allianzColumnHelper.accessor('data_valuta', {
+    header: 'Data Valuta',
+    enableColumnFilter: false,
+  }),
+  allianzColumnHelper.accessor('descrizione', {
+    header: 'Descrizione',
+    filterFn: 'includesString',
+  }),
+  allianzColumnHelper.accessor('importo', {
+    header: 'Importo',
+    enableColumnFilter: false,
+  }),
+  allianzColumnHelper.accessor('transaction_id', {
+    header: 'Tx ID',
+    enableColumnFilter: false,
+    enableSorting: false,
+  }),
+];
+
+// TanStack Table for Allianz
+const allianzTable = useVueTable({
+  get data() { return allianzRawTransactions.value; },
+  columns: allianzColumns,
+  state: {
+    get columnFilters() { return allianzColumnFilters.value; },
+    get sorting() { return allianzSorting.value; },
+  },
+  onColumnFiltersChange: (updater) => {
+    allianzColumnFilters.value = typeof updater === 'function' 
+      ? updater(allianzColumnFilters.value) 
+      : updater;
+  },
+  onSortingChange: (updater) => {
+    allianzSorting.value = typeof updater === 'function' 
+      ? updater(allianzSorting.value) 
+      : updater;
+  },
+  getCoreRowModel: getCoreRowModel(),
+  getFilteredRowModel: getFilteredRowModel(),
+  getSortedRowModel: getSortedRowModel(),
+  getPaginationRowModel: getPaginationRowModel(),
+  initialState: {
+    pagination: { pageSize: 50 },
+  },
+});
+
+function clearAllianzFilters() {
+  allianzColumnFilters.value = [];
+}
+
+async function fetchIntesaRawTransactions() {
+  intesaLoading.value = true;
+  intesaError.value = null;
+  try {
+    intesaRawTransactions.value = await api.rawTransactions.getIntesa();
+  } catch (err) {
+    intesaError.value = err instanceof Error ? err.message : 'Failed to load Intesa raw transactions';
+  } finally {
+    intesaLoading.value = false;
+  }
+}
+
+async function fetchAllianzRawTransactions() {
+  allianzLoading.value = true;
+  allianzError.value = null;
+  try {
+    allianzRawTransactions.value = await api.rawTransactions.getAllianz();
+  } catch (err) {
+    allianzError.value = err instanceof Error ? err.message : 'Failed to load Allianz raw transactions';
+  } finally {
+    allianzLoading.value = false;
+  }
+}
+
 // ============ CSV EXPORT ============
 function escapeCSVValue(value: string | number | boolean | null | undefined): string {
   if (value === null || value === undefined) return '';
@@ -1295,6 +1808,58 @@ function exportAssetsHistoryToCSV() {
   downloadCSV(csvContent, `assets_history_${timestamp}.csv`);
 }
 
+function exportIntesaToCSV() {
+  // Get filtered rows (respects current filters)
+  const filteredRows = intesaTable.getFilteredRowModel().rows;
+  
+  // CSV headers
+  const headers = ['Data', 'Operazione', 'Dettagli', 'Conto/Carta', 'Contabilizzazione', 'Categoria', 'Valuta', 'Importo', 'Transaction ID'];
+  
+  // Build CSV content
+  const rows = filteredRows.map(row => {
+    const tx = row.original;
+    return [
+      escapeCSVValue(tx.data),
+      escapeCSVValue(tx.operazione || ''),
+      escapeCSVValue(tx.dettagli || ''),
+      escapeCSVValue(tx.conto_o_carta || ''),
+      escapeCSVValue(tx.contabilizzazione || ''),
+      escapeCSVValue(tx.categoria || ''),
+      escapeCSVValue(tx.valuta || ''),
+      escapeCSVValue(tx.importo),
+      escapeCSVValue(tx.transaction_id || ''),
+    ].join(',');
+  });
+  
+  const csvContent = [headers.join(','), ...rows].join('\n');
+  const timestamp = new Date().toISOString().slice(0, 10);
+  downloadCSV(csvContent, `intesa_raw_${timestamp}.csv`);
+}
+
+function exportAllianzToCSV() {
+  // Get filtered rows (respects current filters)
+  const filteredRows = allianzTable.getFilteredRowModel().rows;
+  
+  // CSV headers
+  const headers = ['Data Contabile', 'Data Valuta', 'Descrizione', 'Importo', 'Transaction ID'];
+  
+  // Build CSV content
+  const rows = filteredRows.map(row => {
+    const tx = row.original;
+    return [
+      escapeCSVValue(tx.data_contabile),
+      escapeCSVValue(tx.data_valuta || ''),
+      escapeCSVValue(tx.descrizione || ''),
+      escapeCSVValue(tx.importo),
+      escapeCSVValue(tx.transaction_id || ''),
+    ].join(',');
+  });
+  
+  const csvContent = [headers.join(','), ...rows].join('\n');
+  const timestamp = new Date().toISOString().slice(0, 10);
+  downloadCSV(csvContent, `allianz_raw_${timestamp}.csv`);
+}
+
 // ============ LIFECYCLE ============
 onMounted(async () => {
   // Load initial data for all tabs
@@ -1318,6 +1883,8 @@ watch(activeTab, async (newTab) => {
     await Promise.all([fetchTransactions(), fetchTransactionTypes()]);
   } else if (newTab === 'assetsHistory') {
     await fetchAssetsHistory();
+  } else if (newTab === 'rawBankTables') {
+    await Promise.all([fetchIntesaRawTransactions(), fetchAllianzRawTransactions()]);
   }
 });
 </script>
@@ -1370,6 +1937,39 @@ h4 {
   color: #007bff;
   border-bottom-color: #007bff;
   font-weight: 600;
+}
+
+/* Sub-tabs */
+.sub-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.sub-tab-btn {
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  background: #f8f9fa;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95em;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.sub-tab-btn:hover {
+  background: #e9ecef;
+  border-color: #ccc;
+}
+
+.sub-tab-btn.active {
+  background: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
+.sub-tab-content {
+  margin-top: 15px;
 }
 
 /* Tab Content */
@@ -1609,6 +2209,12 @@ h4 {
   border-radius: 4px;
   font-size: 0.9em;
   color: #666;
+}
+
+.table-info-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
 }
 
 /* No Results */
