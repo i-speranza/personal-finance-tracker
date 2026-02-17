@@ -6,6 +6,7 @@ to standardized transaction type labels.
 
 For Intesa: Maps operazione.lower() to transaction type label
 For Allianz: Maps transaction_type.lower() (first part before dash) to transaction type label
+For FinecoBank: Maps transaction_type.lower() (first part before dash) to transaction type label
 """
 
 # Transaction type label constants
@@ -91,6 +92,20 @@ TRANSACTION_MAP_ALLIANZ = {
     "emolumenti": STIPENDIO,
 }
 
+# FinecoBank transaction type mappings
+TRANSACTION_MAP_FINECO = {
+    "pagamento visa debit": PAGAMENTO_CON_CARTA,
+    "bancomat": PAGAMENTO_CON_CARTA,
+    "visa debit": PAGAMENTO_CON_CARTA,
+    "pagamento bancomat": PAGAMENTO_CON_CARTA,
+    "giroconto": GIROCONTO,
+    "sepa direct debit": ADDEBITO_DIRETTO,
+    "stipendio": STIPENDIO,
+    "bonifico ricevuto": BONIFICO_RICEVUTO,
+    "bonifico effettuato": BONIFICO_EFFETTUATO
+}
+
 # Default transaction types
 DEFAULT_TRANSACTION_TYPE_INTESA = ALTRO
 DEFAULT_TRANSACTION_TYPE_ALLIANZ = ALTRO
+DEFAULT_TRANSACTION_TYPE_FINECO = ALTRO
