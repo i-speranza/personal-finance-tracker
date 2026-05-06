@@ -22,6 +22,7 @@ from ..raw_transactions import insert_intesa_raw_transaction, insert_allianz_raw
 # Import parsers to register them
 from ..transactions_preprocessing_intesa import IntesaParser
 from ..transactions_preprocessing_allianz import AllianzParser
+from ..transactions_preprocessing_finecobank import FinecoBankParser
 from ..transactions_preprocessing import register_transactions_parser
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ router = APIRouter()
 # Register parsers on import
 register_transactions_parser(IntesaParser())
 register_transactions_parser(AllianzParser())
+register_transactions_parser(FinecoBankParser())
 
 # Data directory for storing raw files
 DATA_DIR = Path(__file__).parent.parent.parent / "data"

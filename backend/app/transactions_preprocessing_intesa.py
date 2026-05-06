@@ -29,7 +29,7 @@ class IntesaParser(BankTransactionsParser):
     Intesa bank parser.
     """
     def __init__(self):
-        super().__init__(skiprows=18, skipfooter=0)
+        super().__init__(skiprows=17, skipfooter=0)
         self._raw_df: Optional[pd.DataFrame] = None
     
     def get_bank_name(self) -> str:
