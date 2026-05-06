@@ -528,14 +528,24 @@ function formatPercent(value: number): string {
   return value.toFixed(1);
 }
 
+// Format amount as thousands with 1 decimal, truncated (not rounded), plus K suffix
+function formatKAmount(value: number): string {
+  const thousands = value / 1000;
+  const truncated = Math.trunc(thousands * 10) / 10;
+  return `${truncated.toFixed(1)}K`;
+}
+
 // Computed property for assets comparison table (last 2 values per asset)
 const assetsComparisonData = computed(() => {
   if (!assetsHistory.value || assetsHistory.value.length === 0) {
+    console.log('[AssetsComparison] No assets history data available');
     return [];
   }
   
+  console.log('[AssetsComparison] Raw assets history count:', assetsHistory.value.length);
+
   // Group assets by account_name (or bank_name + account_name for uniqueness)
-  const assetMap = new Map<string, { date: number; amount: number }[]>();
+  const assetMap = new Map<string, { date: number; amount: number; bankName: string }[]>();
   
   assetsHistory.value.forEach(asset => {
     const assetKey = `${asset.bank_name} - ${asset.account_name}`;
@@ -547,6 +557,7 @@ const assetsComparisonData = computed(() => {
     assetMap.get(assetKey)!.push({
       date: parseISO(asset.date).getTime(),
       amount: asset.amount,
+      bankName: asset.bank_name,
     });
   });
   
@@ -554,6 +565,14 @@ const assetsComparisonData = computed(() => {
   assetMap.forEach((data) => {
     data.sort((a, b) => a.date - b.date);
   });
+
+  const groupedPreview = Array.from(assetMap.entries()).map(([assetKey, data]) => ({
+    assetKey,
+    points: data.length,
+    firstDate: data.length > 0 ? format(new Date(data[0].date), 'yyyy-MM-dd') : null,
+    lastDate: data.length > 0 ? format(new Date(data[data.length - 1].date), 'yyyy-MM-dd') : null,
+  }));
+  console.log('[AssetsComparison] Grouped assets summary:', groupedPreview);
   
   // Find the latest observation date across all assets
   let latestDate = 0;
@@ -565,6 +584,11 @@ const assetsComparisonData = computed(() => {
       }
     }
   });
+
+  console.log(
+    '[AssetsComparison] Latest observation date:',
+    latestDate ? format(new Date(latestDate), 'yyyy-MM-dd') : 'N/A'
+  );
   
   // Extract last 2 values for each asset (only if asset exists at latest date)
   const result: {
@@ -578,6 +602,10 @@ const assetsComparisonData = computed(() => {
   assetMap.forEach((data, assetKey) => {
     // Skip assets that don't have data at the latest observation date
     if (data.length === 0 || data[data.length - 1].date !== latestDate) {
+      const lastDate = data.length > 0 ? format(new Date(data[data.length - 1].date), 'yyyy-MM-dd') : 'N/A';
+      console.log(
+        `[AssetsComparison] Skipping asset "${assetKey}" (lastDate=${lastDate}, latestDate=${format(new Date(latestDate), 'yyyy-MM-dd')})`
+      );
       return;
     }
     
@@ -586,6 +614,15 @@ const assetsComparisonData = computed(() => {
       const lastValue = data[data.length - 1].amount;
       const absoluteDiff = lastValue - previousValue;
       const percentDiff = previousValue !== 0 ? ((lastValue - previousValue) / Math.abs(previousValue)) * 100 : 0;
+      console.log('[AssetsComparison] Using 2-point comparison:', {
+        assetKey,
+        previousDate: format(new Date(data[data.length - 2].date), 'yyyy-MM-dd'),
+        lastDate: format(new Date(data[data.length - 1].date), 'yyyy-MM-dd'),
+        previousValue,
+        lastValue,
+        absoluteDiff,
+        percentDiff,
+      });
       
       result.push({
         assetName: assetKey,
@@ -597,6 +634,11 @@ const assetsComparisonData = computed(() => {
     } else if (data.length === 1) {
       // Only one data point available
       const lastValue = data[data.length - 1].amount;
+      console.log('[AssetsComparison] Using single-point comparison:', {
+        assetKey,
+        date: format(new Date(data[data.length - 1].date), 'yyyy-MM-dd'),
+        lastValue,
+      });
       result.push({
         assetName: assetKey,
         previousValue: 0,
@@ -609,6 +651,7 @@ const assetsComparisonData = computed(() => {
   
   // Sort by asset name
   result.sort((a, b) => a.assetName.localeCompare(b.assetName));
+  console.log('[AssetsComparison] Final rows:', result);
   
   return result;
 });
@@ -677,7 +720,7 @@ function updateAssetsHistoryChart() {
   }
   
   // Group assets by account_name (or bank_name + account_name for uniqueness)
-  const assetMap = new Map<string, { date: number; amount: number }[]>();
+  const assetMap = new Map<string, { date: number; amount: number; bankName: string }[]>();
   
   assetsHistory.value.forEach(asset => {
     // Create a unique key for each asset (bank + account)
@@ -690,6 +733,7 @@ function updateAssetsHistoryChart() {
     assetMap.get(assetKey)!.push({
       date: parseISO(asset.date).getTime(),
       amount: asset.amount,
+      bankName: asset.bank_name,
     });
   });
   
@@ -737,7 +781,7 @@ function updateAssetsHistoryChart() {
     const colorIndex = index % colors.length;
     return {
       label: assetKey,
-      data: data.map(d => ({ x: d.date, y: d.amount })),
+      data: data.map(d => ({ x: d.date, y: d.amount, bankName: d.bankName })),
       borderColor: colors[colorIndex],
       backgroundColor: colors[colorIndex].replace('1)', '0.2)'),
       tension: 0.1,
@@ -756,7 +800,7 @@ function updateAssetsHistoryChart() {
   
   // Convert to sorted array
   const sumData = Array.from(sumByDate.entries())
-    .map(([date, amount]) => ({ x: date, y: amount }))
+    .map(([date, amount]) => ({ x: date, y: amount, bankName: '-' }))
     .sort((a, b) => a.x - b.x);
   
   // Add sum dataset as the first dataset (so it appears on top)
@@ -814,14 +858,21 @@ function updateAssetsHistoryChart() {
         },
         tooltip: {
           callbacks: {
+            title: (items) => {
+              const firstItem = items[0];
+              if (!firstItem || firstItem.parsed.y === null || firstItem.parsed.y === undefined) {
+                return '';
+              }
+              return `Amount: ${formatKAmount(firstItem.parsed.y)}`;
+            },
             label: (context) => {
               const raw = context.raw as { x?: number; y?: number };
               if (!raw || raw.x === undefined || raw.y === undefined) {
                 return [];
               }
               const date = format(new Date(raw.x), 'yyyy-MM-dd');
-              const amount = raw.y.toFixed(2);
-              return [`Date: ${date}`, `Amount: ${amount}`];
+              const assetName = context.dataset.label ?? '-';
+              return [`Date: ${date}`, `Asset: ${assetName}`];
             },
           },
         },
@@ -894,6 +945,7 @@ function updateScatterChart() {
       y: t.amount,
       dateLabel: format(parseISO(t.date), 'yyyy-MM-dd'),
       description: t.description ?? '-',
+      bankName: t.bank_name ?? '-',
     }));
   
   const expenseData = transactions
@@ -903,6 +955,7 @@ function updateScatterChart() {
       y: t.amount,
       dateLabel: format(parseISO(t.date), 'yyyy-MM-dd'),
       description: t.description ?? '-',
+      bankName: t.bank_name ?? '-',
     }));
   
   // Remove old double-click handler
@@ -976,14 +1029,15 @@ function updateScatterChart() {
         tooltip: {
           callbacks: {
             label: (context) => {
-              const raw = context.raw as { dateLabel?: string; description?: string };
+              const raw = context.raw as { dateLabel?: string; description?: string; bankName?: string };
               if (!raw || context.parsed.x === null || context.parsed.y === null) {
                 return [];
               }
               const date = raw.dateLabel ?? format(new Date(context.parsed.x), 'yyyy-MM-dd');
               const amount = context.parsed.y.toFixed(2);
               const desc = raw.description ?? '-';
-              return [`Date: ${date}`, `Amount: ${amount}`, `Description: ${desc}`];
+              const bank = raw.bankName ?? '-';
+              return [`Date: ${date}`, `Amount: ${amount}`, `Bank: ${bank}`, `Description: ${desc}`];
             },
           },
         },
