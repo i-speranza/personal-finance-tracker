@@ -246,6 +246,7 @@ coverage/
 data/*.db
 data/*.db-journal
 backend/data/*
+backend/scripts/*
 !backend/data/.gitkeep
 exports/*
 !exports/.gitkeep
