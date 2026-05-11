@@ -353,3 +353,120 @@ export interface BulkAssetsHistoryResult {
   created_count: number;
   entries: AssetsHistory[];
 }
+
+// Investment portfolio (assets + trades) — API uses JSON keys `type` and `class`
+export type InvPortfolioKind = 'fund' | 'bond' | 'share';
+export type InvPortfolioClass = 'share' | 'bond' | 'commodity';
+export type InvPortfolioStatus = 'active' | 'sold' | 'special';
+export type InvPortfolioTxType = 'purchase' | 'sell';
+
+export interface InvestmentPortfolioAsset {
+  id: number;
+  asset_id: string;
+  asset_name: string;
+  isin: string | null;
+  ticker: string | null;
+  issuer: string | null;
+  broker: string | null;
+  type: InvPortfolioKind;
+  'class': InvPortfolioClass;
+  market: string;
+  status: InvPortfolioStatus;
+  currency: string;
+  tax_rate: number;
+  default_exchange_rate: number;
+  perc_usa: number;
+  perc_eu: number;
+  perc_other_developed: number;
+  perc_emerging: number;
+  perc_other: number;
+  expiration_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InvestmentPortfolioAssetCreate {
+  asset_id: string;
+  asset_name: string;
+  isin?: string | null;
+  ticker?: string | null;
+  issuer?: string | null;
+  broker?: string | null;
+  type: InvPortfolioKind;
+  'class': InvPortfolioClass;
+  market?: string;
+  status?: InvPortfolioStatus;
+  currency?: string;
+  tax_rate?: number;
+  default_exchange_rate?: number;
+  perc_usa?: number;
+  perc_eu?: number;
+  perc_other_developed?: number;
+  perc_emerging?: number;
+  perc_other?: number;
+  expiration_date?: string | null;
+}
+
+export interface InvestmentPortfolioAssetUpdate {
+  asset_id?: string;
+  asset_name?: string;
+  isin?: string | null;
+  ticker?: string | null;
+  issuer?: string | null;
+  broker?: string | null;
+  type?: InvPortfolioKind;
+  'class'?: InvPortfolioClass;
+  market?: string;
+  status?: InvPortfolioStatus;
+  currency?: string;
+  tax_rate?: number;
+  default_exchange_rate?: number;
+  perc_usa?: number;
+  perc_eu?: number;
+  perc_other_developed?: number;
+  perc_emerging?: number;
+  perc_other?: number;
+  expiration_date?: string | null;
+}
+
+export interface InvestmentPortfolioTransaction {
+  id: number;
+  asset_pk: number;
+  trade_date: string;
+  transaction_type: InvPortfolioTxType;
+  quantity: number;
+  unit_price: number;
+  exchange_rate: number;
+  fees: number;
+  plus_minus: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InvestmentPortfolioTransactionCreate {
+  asset_pk: number;
+  trade_date: string;
+  transaction_type: InvPortfolioTxType;
+  quantity: number;
+  unit_price: number;
+  exchange_rate?: number;
+  fees?: number;
+  plus_minus?: number | null;
+}
+
+export interface InvestmentPortfolioTransactionUpdate {
+  trade_date?: string;
+  transaction_type?: InvPortfolioTxType;
+  quantity?: number;
+  unit_price?: number;
+  exchange_rate?: number;
+  fees?: number;
+  plus_minus?: number | null;
+}
+
+export interface InvestmentPortfolioImportResult {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
+}

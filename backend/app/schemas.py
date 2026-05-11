@@ -1,6 +1,6 @@
 """Pydantic schemas for request/response validation."""
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field, ConfigDict, model_validator
+from typing import Optional, List
 from datetime import date, datetime
 from enum import Enum
 
@@ -341,3 +341,202 @@ class Account(AccountBase):
 
     class Config:
         from_attributes = True
+
+
+# --- Investment portfolio (assets + trades) ---
+
+GEO_SUM_TOLERANCE = 0.02
+
+
+class InvPortfolioKindSchema(str, Enum):
+    fund = "fund"
+    bond = "bond"
+    share = "share"
+
+
+class InvPortfolioClassSchema(str, Enum):
+    share = "share"
+    bond = "bond"
+    commodity = "commodity"
+
+
+class InvPortfolioStatusSchema(str, Enum):
+    active = "active"
+    sold = "sold"
+    special = "special"
+
+
+class InvPortfolioTxTypeSchema(str, Enum):
+    purchase = "purchase"
+    sell = "sell"
+
+
+def _geo_sum_ok(
+    perc_usa: float,
+    perc_eu: float,
+    perc_other_developed: float,
+    perc_emerging: float,
+    perc_other: float,
+) -> bool:
+    s = perc_usa + perc_eu + perc_other_developed + perc_emerging + perc_other
+    return abs(s - 100.0) <= GEO_SUM_TOLERANCE
+
+
+class InvestmentPortfolioAssetBase(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    asset_id: str = Field(..., min_length=1, max_length=128)
+    asset_name: str = Field(..., min_length=1)
+    isin: Optional[str] = None
+    ticker: Optional[str] = None
+    issuer: Optional[str] = None
+    broker: Optional[str] = None
+    type: InvPortfolioKindSchema
+    asset_class: InvPortfolioClassSchema = Field(..., alias="class")
+    market: str = "Borsa Italiana"
+    status: InvPortfolioStatusSchema = InvPortfolioStatusSchema.active
+    currency: str = "EUR"
+    tax_rate: float = Field(default=0.26, ge=0, le=1)
+    default_exchange_rate: float = Field(default=1.0, gt=0)
+    perc_usa: float = Field(default=0.0, ge=0, le=100)
+    perc_eu: float = Field(default=0.0, ge=0, le=100)
+    perc_other_developed: float = Field(default=0.0, ge=0, le=100)
+    perc_emerging: float = Field(default=0.0, ge=0, le=100)
+    perc_other: float = Field(default=0.0, ge=0, le=100)
+    expiration_date: Optional[date] = None
+
+    @model_validator(mode="after")
+    def validate_geo_and_bond(self):
+        if not _geo_sum_ok(
+            self.perc_usa,
+            self.perc_eu,
+            self.perc_other_developed,
+            self.perc_emerging,
+            self.perc_other,
+        ):
+            s = (
+                self.perc_usa
+                + self.perc_eu
+                + self.perc_other_developed
+                + self.perc_emerging
+                + self.perc_other
+            )
+            raise ValueError(f"Geographic percentages must sum to 100 (within {GEO_SUM_TOLERANCE}), got {s}")
+        if self.type == InvPortfolioKindSchema.bond and self.expiration_date is None:
+            raise ValueError("expiration_date is required when type is bond")
+        return self
+
+
+class InvestmentPortfolioAssetCreate(InvestmentPortfolioAssetBase):
+    pass
+
+
+class InvestmentPortfolioAssetUpdate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    asset_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    asset_name: Optional[str] = None
+    isin: Optional[str] = None
+    ticker: Optional[str] = None
+    issuer: Optional[str] = None
+    broker: Optional[str] = None
+    type: Optional[InvPortfolioKindSchema] = None
+    asset_class: Optional[InvPortfolioClassSchema] = Field(default=None, alias="class")
+    market: Optional[str] = None
+    status: Optional[InvPortfolioStatusSchema] = None
+    currency: Optional[str] = None
+    tax_rate: Optional[float] = Field(default=None, ge=0, le=1)
+    default_exchange_rate: Optional[float] = Field(default=None, gt=0)
+    perc_usa: Optional[float] = Field(default=None, ge=0, le=100)
+    perc_eu: Optional[float] = Field(default=None, ge=0, le=100)
+    perc_other_developed: Optional[float] = Field(default=None, ge=0, le=100)
+    perc_emerging: Optional[float] = Field(default=None, ge=0, le=100)
+    perc_other: Optional[float] = Field(default=None, ge=0, le=100)
+    expiration_date: Optional[date] = None
+
+
+class InvestmentPortfolioAssetResponse(BaseModel):
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        ser_json_by_alias=True,
+    )
+
+    id: int
+    asset_id: str
+    asset_name: str
+    isin: Optional[str]
+    ticker: Optional[str]
+    issuer: Optional[str]
+    broker: Optional[str]
+    inv_kind: InvPortfolioKindSchema = Field(serialization_alias="type")
+    inv_class: InvPortfolioClassSchema = Field(serialization_alias="class")
+    market: str
+    status: InvPortfolioStatusSchema
+    currency: str
+    tax_rate: float
+    default_exchange_rate: float
+    perc_usa: float
+    perc_eu: float
+    perc_other_developed: float
+    perc_emerging: float
+    perc_other: float
+    expiration_date: Optional[date]
+    created_at: datetime
+    updated_at: datetime
+
+
+class InvestmentPortfolioTransactionCreate(BaseModel):
+    asset_pk: int
+    trade_date: date
+    transaction_type: InvPortfolioTxTypeSchema
+    quantity: float = Field(..., gt=0)
+    unit_price: float
+    exchange_rate: float = Field(default=1.0, gt=0)
+    fees: float = Field(default=0.0, ge=0)
+    plus_minus: Optional[float] = None
+
+    @model_validator(mode="after")
+    def sell_requires_plus_minus(self):
+        if self.transaction_type == InvPortfolioTxTypeSchema.sell and self.plus_minus is None:
+            raise ValueError("plus_minus is required for sell transactions (taxable margin)")
+        return self
+
+
+class InvestmentPortfolioTransactionUpdate(BaseModel):
+    trade_date: Optional[date] = None
+    transaction_type: Optional[InvPortfolioTxTypeSchema] = None
+    quantity: Optional[float] = None
+    unit_price: Optional[float] = None
+    exchange_rate: Optional[float] = Field(default=None, gt=0)
+    fees: Optional[float] = Field(default=None, ge=0)
+    plus_minus: Optional[float] = None
+
+    @model_validator(mode="after")
+    def quantity_positive_when_set(self):
+        if self.quantity is not None and self.quantity <= 0:
+            raise ValueError("quantity must be greater than 0")
+        return self
+
+
+class InvestmentPortfolioTransactionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    asset_pk: int
+    trade_date: date
+    transaction_type: InvPortfolioTxTypeSchema
+    quantity: float
+    unit_price: float
+    exchange_rate: float
+    fees: float
+    plus_minus: float
+    created_at: datetime
+    updated_at: datetime
+
+
+class InvestmentPortfolioImportResult(BaseModel):
+    created: int = 0
+    updated: int = 0
+    skipped: int = 0
+    errors: List[str] = Field(default_factory=list)

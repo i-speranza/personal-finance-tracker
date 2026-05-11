@@ -1,6 +1,6 @@
 <template>
   <div class="dashboard">
-    <h2>Dashboard</h2>
+    <h2>Cash flow — Dashboard</h2>
     
     <!-- Filters Section -->
     <div class="filters">

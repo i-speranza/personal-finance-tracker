@@ -38,6 +38,13 @@ import type {
   BulkAssetsHistoryCreate,
   BulkAssetsHistoryResult,
   SyncAccountsResult,
+  InvestmentPortfolioAsset,
+  InvestmentPortfolioAssetCreate,
+  InvestmentPortfolioAssetUpdate,
+  InvestmentPortfolioTransaction,
+  InvestmentPortfolioTransactionCreate,
+  InvestmentPortfolioTransactionUpdate,
+  InvestmentPortfolioImportResult,
 } from '@/types';
 
 const API_BASE_URL = import.meta.env.DEV ? '/api' : '/api';
@@ -444,6 +451,93 @@ export const rawTransactionsApi = {
   },
 };
 
+// Investment portfolio assets
+export const investmentPortfolioAssetsApi = {
+  getAll: (): Promise<InvestmentPortfolioAsset[]> => {
+    return request<InvestmentPortfolioAsset[]>('/investment-assets');
+  },
+
+  getById: (id: number): Promise<InvestmentPortfolioAsset> => {
+    return request<InvestmentPortfolioAsset>(`/investment-assets/${id}`);
+  },
+
+  getByKey: (assetId: string): Promise<InvestmentPortfolioAsset> => {
+    return request<InvestmentPortfolioAsset>(`/investment-assets/by-key/${encodeURIComponent(assetId)}`);
+  },
+
+  create: (data: InvestmentPortfolioAssetCreate): Promise<InvestmentPortfolioAsset> => {
+    return request<InvestmentPortfolioAsset>('/investment-assets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  update: (id: number, data: InvestmentPortfolioAssetUpdate): Promise<InvestmentPortfolioAsset> => {
+    return request<InvestmentPortfolioAsset>(`/investment-assets/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  delete: (id: number): Promise<void> => {
+    return request<void>(`/investment-assets/${id}`, { method: 'DELETE' });
+  },
+
+  importCsv: async (file: File): Promise<InvestmentPortfolioImportResult> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const url = `${API_BASE_URL}/investment-assets/import-csv`;
+    const response = await fetch(url, { method: 'POST', body: formData });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new ApiError(response.status, error.detail);
+    }
+    return response.json();
+  },
+};
+
+// Investment portfolio transactions
+export const investmentPortfolioTransactionsApi = {
+  getAll: (assetPk?: number): Promise<InvestmentPortfolioTransaction[]> => {
+    const q = assetPk != null ? `?asset_pk=${assetPk}` : '';
+    return request<InvestmentPortfolioTransaction[]>(`/investment-transactions${q}`);
+  },
+
+  getById: (id: number): Promise<InvestmentPortfolioTransaction> => {
+    return request<InvestmentPortfolioTransaction>(`/investment-transactions/${id}`);
+  },
+
+  create: (data: InvestmentPortfolioTransactionCreate): Promise<InvestmentPortfolioTransaction> => {
+    return request<InvestmentPortfolioTransaction>('/investment-transactions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  update: (id: number, data: InvestmentPortfolioTransactionUpdate): Promise<InvestmentPortfolioTransaction> => {
+    return request<InvestmentPortfolioTransaction>(`/investment-transactions/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  delete: (id: number): Promise<void> => {
+    return request<void>(`/investment-transactions/${id}`, { method: 'DELETE' });
+  },
+
+  importCsv: async (file: File): Promise<InvestmentPortfolioImportResult> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const url = `${API_BASE_URL}/investment-transactions/import-csv`;
+    const response = await fetch(url, { method: 'POST', body: formData });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new ApiError(response.status, error.detail);
+    }
+    return response.json();
+  },
+};
+
 // Export all APIs
 export const api = {
   transactions: transactionsApi,
@@ -457,4 +551,6 @@ export const api = {
   assetTypes: assetTypesApi,
   upload: uploadApi,
   rawTransactions: rawTransactionsApi,
+  investmentPortfolioAssets: investmentPortfolioAssetsApi,
+  investmentPortfolioTransactions: investmentPortfolioTransactionsApi,
 };

@@ -1,6 +1,6 @@
 <template>
   <div class="upload-page">
-    <h2>Upload & Input Data</h2>
+    <h2>Cash flow — Upload</h2>
     
     <!-- Account Status Panel -->
     <section class="panel account-status-panel">

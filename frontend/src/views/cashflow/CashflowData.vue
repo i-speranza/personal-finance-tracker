@@ -1,6 +1,6 @@
 <template>
   <div class="data-management">
-    <h2>Data Management</h2>
+    <h2>Cash flow — Data</h2>
     
     <!-- Tab Navigation -->
     <div class="tabs">

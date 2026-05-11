@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from .database import engine, Base
+from .database import engine, Base, apply_sqlite_light_migrations
 
 # Configure logging
 logging.basicConfig(
@@ -19,6 +19,7 @@ from . import models  # noqa: F401
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+apply_sqlite_light_migrations()
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -94,6 +95,15 @@ async def edit_page():
     return {"error": "Page not found"}
 
 
+@app.get("/investments")
+async def investments_page():
+    """Serve index.html for Vue Router /investments route."""
+    index_path = get_index_path()
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"error": "Page not found"}
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
@@ -101,7 +111,17 @@ async def health_check():
 
 
 # Import routers
-from .routers import transactions, banks, accounts, assets_history, upload, asset_types, raw_transactions
+from .routers import (
+    transactions,
+    banks,
+    accounts,
+    assets_history,
+    upload,
+    asset_types,
+    raw_transactions,
+    investment_assets,
+    investment_transactions,
+)
 
 app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
 app.include_router(banks.router, prefix="/api/banks", tags=["banks"])
@@ -110,3 +130,5 @@ app.include_router(assets_history.router, prefix="/api/assets-history", tags=["a
 app.include_router(upload.router, prefix="/api/upload", tags=["upload"])
 app.include_router(asset_types.router, prefix="/api/asset-types", tags=["asset-types"])
 app.include_router(raw_transactions.router, prefix="/api", tags=["raw-transactions"])
+app.include_router(investment_assets.router, prefix="/api/investment-assets", tags=["investment-assets"])
+app.include_router(investment_transactions.router, prefix="/api/investment-transactions", tags=["investment-transactions"])
