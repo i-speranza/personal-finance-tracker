@@ -4,11 +4,12 @@ import io
 from datetime import date
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..date_parse import parse_flexible_date
+from ..investment_cost_basis import current_average_unit_cost_without_flush
 from ..models import InvestmentPortfolioAsset, InvPortfolioKind, InvPortfolioClass, InvPortfolioStatus
 from ..schemas import (
     InvestmentPortfolioAssetCreate,
@@ -38,8 +39,23 @@ def _status(s: InvPortfolioStatusSchema) -> InvPortfolioStatus:
 
 
 @router.get("/", response_model=List[InvestmentPortfolioAssetResponse])
-def list_assets(db: Session = Depends(get_db)):
-    return db.query(InvestmentPortfolioAsset).order_by(InvestmentPortfolioAsset.asset_id).all()
+def list_assets(
+    status: Optional[InvPortfolioStatusSchema] = Query(None),
+    include_position: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    q = db.query(InvestmentPortfolioAsset)
+    if status is not None:
+        q = q.filter(InvestmentPortfolioAsset.status == _status(status))
+    rows = q.order_by(InvestmentPortfolioAsset.asset_id).all()
+    if not include_position:
+        return [InvestmentPortfolioAssetResponse.model_validate(a) for a in rows]
+    out: List[InvestmentPortfolioAssetResponse] = []
+    for a in rows:
+        base = InvestmentPortfolioAssetResponse.model_validate(a)
+        cur = current_average_unit_cost_without_flush(db, a.id)
+        out.append(base.model_copy(update={"current_average_unit_cost": cur}))
+    return out
 
 
 @router.get("/by-key/{asset_id}", response_model=InvestmentPortfolioAssetResponse)

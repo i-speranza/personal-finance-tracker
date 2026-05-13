@@ -31,10 +31,15 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
-def apply_sqlite_light_migrations() -> None:
-    """Add columns missing on older SQLite files (create_all does not ALTER)."""
+def apply_sqlite_light_migrations() -> bool:
+    """Add columns / tables missing on older SQLite files (create_all does not ALTER).
+
+    Returns True if `average_unit_cost_after_trade` was added to portfolio transactions this run
+    (caller should run cost-basis backfill).
+    """
     if "sqlite" not in DATABASE_URL:
-        return
+        return False
+    added_average_cost_column = False
     try:
         with engine.begin() as conn:
             r = conn.execute(
@@ -58,8 +63,78 @@ def apply_sqlite_light_migrations() -> None:
                     logger.info(
                         "SQLite: dropped legacy column investment_portfolio_transactions.plus_minus_manual"
                     )
+                if "average_unit_cost_after_trade" not in tx_cols:
+                    conn.execute(
+                        text(
+                            "ALTER TABLE investment_portfolio_transactions "
+                            "ADD COLUMN average_unit_cost_after_trade FLOAT"
+                        )
+                    )
+                    logger.info(
+                        "SQLite: added column investment_portfolio_transactions.average_unit_cost_after_trade"
+                    )
+                    added_average_cost_column = True
+
+            mq = conn.execute(
+                text(
+                    "SELECT name FROM sqlite_master WHERE type='table' "
+                    "AND name='investment_portfolio_market_quotes'"
+                )
+            ).fetchone()
+            if not mq:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE investment_portfolio_market_quotes (
+                            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                            as_of_date DATE NOT NULL,
+                            asset_pk INTEGER NOT NULL,
+                            market_unit_price FLOAT NOT NULL,
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            FOREIGN KEY(asset_pk) REFERENCES investment_portfolio_assets (id)
+                        )
+                        """
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS uq_inv_portfolio_market_quote_date_asset "
+                        "ON investment_portfolio_market_quotes (as_of_date, asset_pk)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_inv_portfolio_market_quotes_as_of_date "
+                        "ON investment_portfolio_market_quotes (as_of_date)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_inv_portfolio_market_quotes_asset_pk "
+                        "ON investment_portfolio_market_quotes (asset_pk)"
+                    )
+                )
+                logger.info("SQLite: created table investment_portfolio_market_quotes")
     except Exception:  # noqa: BLE001
         logger.exception("SQLite light migration failed")
+    return added_average_cost_column
+
+
+def backfill_investment_average_unit_costs() -> None:
+    """Populate average_unit_cost_after_trade for all assets (e.g. after SQLite adds the column)."""
+    try:
+        from .investment_cost_basis import recalculate_average_unit_costs_for_all_assets
+
+        db = SessionLocal()
+        try:
+            recalculate_average_unit_costs_for_all_assets(db)
+            db.commit()
+            logger.info("SQLite: backfilled investment_portfolio_transactions.average_unit_cost_after_trade")
+        finally:
+            db.close()
+    except Exception:  # noqa: BLE001
+        logger.exception("SQLite: backfill average_unit_cost_after_trade failed")
 
 
 def get_db():

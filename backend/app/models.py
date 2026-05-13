@@ -260,6 +260,12 @@ class InvestmentPortfolioAsset(Base):
         cascade="all, delete-orphan",
         order_by="InvestmentPortfolioTransaction.trade_date, InvestmentPortfolioTransaction.id",
     )
+    market_quotes = relationship(
+        "InvestmentPortfolioMarketQuote",
+        back_populates="asset",
+        cascade="all, delete-orphan",
+        order_by="InvestmentPortfolioMarketQuote.as_of_date.desc(), InvestmentPortfolioMarketQuote.id.desc()",
+    )
 
 
 class InvestmentPortfolioTransaction(Base):
@@ -277,9 +283,30 @@ class InvestmentPortfolioTransaction(Base):
     fees = Column(Float, nullable=False, default=0.0)
     # Taxable margin on sell (loss or gain); user-provided. Purchases store 0.
     plus_minus = Column(Float, nullable=False, default=0.0)
+    # Weighted average acquisition cost per unit (portfolio currency) after this purchase; null for sells.
+    average_unit_cost_after_trade = Column(Float, nullable=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     asset = relationship("InvestmentPortfolioAsset", back_populates="transactions")
 
     __table_args__ = (Index("idx_inv_portfolio_tx_asset_date", "asset_pk", "trade_date"),)
+
+
+class InvestmentPortfolioMarketQuote(Base):
+    """User-entered mark-to-market unit price for a portfolio asset on a given date."""
+
+    __tablename__ = "investment_portfolio_market_quotes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    as_of_date = Column(Date, nullable=False, index=True)
+    asset_pk = Column(Integer, ForeignKey("investment_portfolio_assets.id"), nullable=False, index=True)
+    market_unit_price = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    asset = relationship("InvestmentPortfolioAsset", back_populates="market_quotes")
+
+    __table_args__ = (
+        Index("uq_inv_portfolio_market_quote_date_asset", "as_of_date", "asset_pk", unique=True),
+    )

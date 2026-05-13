@@ -2,13 +2,14 @@
 import csv
 import io
 from datetime import date
-from typing import List, Optional
+from typing import List, Optional, Set
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..date_parse import parse_flexible_date
+from ..investment_cost_basis import recalculate_average_unit_costs_for_asset
 from ..models import InvestmentPortfolioAsset, InvestmentPortfolioTransaction, InvPortfolioTxType
 from ..schemas import (
     InvestmentPortfolioTransactionCreate,
@@ -23,6 +24,32 @@ router = APIRouter()
 
 def _tx_type(s: InvPortfolioTxTypeSchema) -> InvPortfolioTxType:
     return InvPortfolioTxType(s.value)
+
+
+def _insert_investment_transaction(db: Session, body: InvestmentPortfolioTransactionCreate) -> InvestmentPortfolioTransaction:
+    asset = db.query(InvestmentPortfolioAsset).filter(InvestmentPortfolioAsset.id == body.asset_pk).first()
+    if not asset:
+        raise HTTPException(status_code=400, detail="asset_pk not found")
+
+    if body.transaction_type == InvPortfolioTxTypeSchema.purchase:
+        plus_minus = 0.0
+    else:
+        plus_minus = float(body.plus_minus)  # validated by schema
+
+    row = InvestmentPortfolioTransaction(
+        asset_pk=body.asset_pk,
+        trade_date=body.trade_date,
+        transaction_type=_tx_type(body.transaction_type),
+        quantity=body.quantity,
+        unit_price=body.unit_price,
+        exchange_rate=body.exchange_rate,
+        fees=body.fees,
+        plus_minus=plus_minus,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
 
 
 @router.get("/", response_model=List[InvestmentPortfolioTransactionResponse])
@@ -49,26 +76,8 @@ def get_transaction(tx_id: int, db: Session = Depends(get_db)):
 
 @router.post("/", response_model=InvestmentPortfolioTransactionResponse, status_code=201)
 def create_transaction(body: InvestmentPortfolioTransactionCreate, db: Session = Depends(get_db)):
-    asset = db.query(InvestmentPortfolioAsset).filter(InvestmentPortfolioAsset.id == body.asset_pk).first()
-    if not asset:
-        raise HTTPException(status_code=400, detail="asset_pk not found")
-
-    if body.transaction_type == InvPortfolioTxTypeSchema.purchase:
-        plus_minus = 0.0
-    else:
-        plus_minus = float(body.plus_minus)  # validated by schema
-
-    row = InvestmentPortfolioTransaction(
-        asset_pk=body.asset_pk,
-        trade_date=body.trade_date,
-        transaction_type=_tx_type(body.transaction_type),
-        quantity=body.quantity,
-        unit_price=body.unit_price,
-        exchange_rate=body.exchange_rate,
-        fees=body.fees,
-        plus_minus=plus_minus,
-    )
-    db.add(row)
+    row = _insert_investment_transaction(db, body)
+    recalculate_average_unit_costs_for_asset(db, body.asset_pk)
     db.commit()
     db.refresh(row)
     return row
@@ -115,6 +124,9 @@ def update_transaction(tx_id: int, body: InvestmentPortfolioTransactionUpdate, d
 
     db.commit()
     db.refresh(row)
+    recalculate_average_unit_costs_for_asset(db, row.asset_pk)
+    db.commit()
+    db.refresh(row)
     return row
 
 
@@ -123,7 +135,10 @@ def delete_transaction(tx_id: int, db: Session = Depends(get_db)):
     row = db.query(InvestmentPortfolioTransaction).filter(InvestmentPortfolioTransaction.id == tx_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Transaction not found")
+    apk = row.asset_pk
     db.delete(row)
+    db.commit()
+    recalculate_average_unit_costs_for_asset(db, apk)
     db.commit()
     return None
 
@@ -157,6 +172,7 @@ async def import_transactions_csv(file: UploadFile = File(...), db: Session = De
         result.errors.append(f"Missing columns: {sorted(missing)}")
         return result
 
+    touched: Set[int] = set()
     for i, row in enumerate(reader, start=2):
         try:
             aid = (row.get("asset_id") or "").strip()
@@ -186,7 +202,8 @@ async def import_transactions_csv(file: UploadFile = File(...), db: Session = De
                 fees=_parse_float(row.get("fees"), 0.0),
                 plus_minus=plus_val,
             )
-            create_transaction(body, db)
+            _insert_investment_transaction(db, body)
+            touched.add(asset.id)
             result.created += 1
         except HTTPException as he:
             db.rollback()
@@ -194,5 +211,10 @@ async def import_transactions_csv(file: UploadFile = File(...), db: Session = De
         except Exception as e:  # noqa: BLE001
             db.rollback()
             result.errors.append(f"Row {i}: {e}")
+
+    for apk in sorted(touched):
+        recalculate_average_unit_costs_for_asset(db, apk)
+    if touched:
+        db.commit()
 
     return result

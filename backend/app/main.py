@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from .database import engine, Base, apply_sqlite_light_migrations
+from .database import engine, Base, apply_sqlite_light_migrations, backfill_investment_average_unit_costs
 
 # Configure logging
 logging.basicConfig(
@@ -19,7 +19,8 @@ from . import models  # noqa: F401
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
-apply_sqlite_light_migrations()
+if apply_sqlite_light_migrations():
+    backfill_investment_average_unit_costs()
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -121,6 +122,7 @@ from .routers import (
     raw_transactions,
     investment_assets,
     investment_transactions,
+    investment_market_quotes,
 )
 
 app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
@@ -132,3 +134,4 @@ app.include_router(asset_types.router, prefix="/api/asset-types", tags=["asset-t
 app.include_router(raw_transactions.router, prefix="/api", tags=["raw-transactions"])
 app.include_router(investment_assets.router, prefix="/api/investment-assets", tags=["investment-assets"])
 app.include_router(investment_transactions.router, prefix="/api/investment-transactions", tags=["investment-transactions"])
+app.include_router(investment_market_quotes.router, prefix="/api/investment-portfolio-valuations", tags=["investment-portfolio-valuations"])

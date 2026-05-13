@@ -484,6 +484,7 @@ class InvestmentPortfolioAssetResponse(BaseModel):
     expiration_date: Optional[date]
     created_at: datetime
     updated_at: datetime
+    current_average_unit_cost: Optional[float] = None
 
 
 class InvestmentPortfolioTransactionCreate(BaseModel):
@@ -531,6 +532,7 @@ class InvestmentPortfolioTransactionResponse(BaseModel):
     exchange_rate: float
     fees: float
     plus_minus: float
+    average_unit_cost_after_trade: Optional[float] = None
     created_at: datetime
     updated_at: datetime
 
@@ -540,3 +542,29 @@ class InvestmentPortfolioImportResult(BaseModel):
     updated: int = 0
     skipped: int = 0
     errors: List[str] = Field(default_factory=list)
+
+
+class InvestmentPortfolioMarketQuoteLine(BaseModel):
+    asset_pk: int = Field(..., ge=1)
+    market_unit_price: float = Field(..., ge=0)
+
+
+class InvestmentPortfolioMarketQuotesBulk(BaseModel):
+    as_of_date: date
+    quotes: List[InvestmentPortfolioMarketQuoteLine]
+
+
+class InvestmentPortfolioMarketQuotesBulkResult(BaseModel):
+    upserted: int = 0
+    errors: List[str] = Field(default_factory=list)
+
+
+class InvestmentPortfolioMarketQuoteResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    as_of_date: date
+    asset_pk: int
+    market_unit_price: float
+    created_at: datetime
+    updated_at: datetime

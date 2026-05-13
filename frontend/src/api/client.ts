@@ -45,6 +45,8 @@ import type {
   InvestmentPortfolioTransactionCreate,
   InvestmentPortfolioTransactionUpdate,
   InvestmentPortfolioImportResult,
+  InvestmentPortfolioMarketQuotesBulk,
+  InvestmentPortfolioMarketQuotesBulkResult,
 } from '@/types';
 
 const API_BASE_URL = import.meta.env.DEV ? '/api' : '/api';
@@ -453,8 +455,15 @@ export const rawTransactionsApi = {
 
 // Investment portfolio assets
 export const investmentPortfolioAssetsApi = {
-  getAll: (): Promise<InvestmentPortfolioAsset[]> => {
-    return request<InvestmentPortfolioAsset[]>('/investment-assets');
+  getAll: (params?: {
+    status?: string;
+    include_position?: boolean;
+  }): Promise<InvestmentPortfolioAsset[]> => {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.append('status', params.status);
+    if (params?.include_position === true) searchParams.append('include_position', 'true');
+    const query = searchParams.toString();
+    return request<InvestmentPortfolioAsset[]>(`/investment-assets${query ? `?${query}` : ''}`);
   },
 
   getById: (id: number): Promise<InvestmentPortfolioAsset> => {
@@ -538,6 +547,15 @@ export const investmentPortfolioTransactionsApi = {
   },
 };
 
+export const investmentPortfolioValuationsApi = {
+  bulkUpsert: (data: InvestmentPortfolioMarketQuotesBulk): Promise<InvestmentPortfolioMarketQuotesBulkResult> => {
+    return request<InvestmentPortfolioMarketQuotesBulkResult>('/investment-portfolio-valuations/bulk', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+};
+
 // Export all APIs
 export const api = {
   transactions: transactionsApi,
@@ -553,4 +571,5 @@ export const api = {
   rawTransactions: rawTransactionsApi,
   investmentPortfolioAssets: investmentPortfolioAssetsApi,
   investmentPortfolioTransactions: investmentPortfolioTransactionsApi,
+  investmentPortfolioValuations: investmentPortfolioValuationsApi,
 };

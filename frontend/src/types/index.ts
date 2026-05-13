@@ -383,6 +383,7 @@ export interface InvestmentPortfolioAsset {
   expiration_date: string | null;
   created_at: string;
   updated_at: string;
+  current_average_unit_cost?: number | null;
 }
 
 export interface InvestmentPortfolioAssetCreate {
@@ -439,6 +440,7 @@ export interface InvestmentPortfolioTransaction {
   exchange_rate: number;
   fees: number;
   plus_minus: number;
+  average_unit_cost_after_trade?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -468,5 +470,20 @@ export interface InvestmentPortfolioImportResult {
   created: number;
   updated: number;
   skipped: number;
+  errors: string[];
+}
+
+export interface InvestmentPortfolioMarketQuoteLine {
+  asset_pk: number;
+  market_unit_price: number;
+}
+
+export interface InvestmentPortfolioMarketQuotesBulk {
+  as_of_date: string;
+  quotes: InvestmentPortfolioMarketQuoteLine[];
+}
+
+export interface InvestmentPortfolioMarketQuotesBulkResult {
+  upserted: number;
   errors: string[];
 }

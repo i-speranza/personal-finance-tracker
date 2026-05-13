@@ -30,6 +30,63 @@
       <pre v-if="importMessage" class="import-result">{{ importMessage }}</pre>
     </section>
 
+    <section class="panel valuation-panel">
+      <h3>Mark-to-market snapshot</h3>
+      <p class="valuation-intro">
+        Enter the <strong>market unit price</strong> per instrument (as quoted on the as-of date). Only rows with a
+        price are saved. <strong>Average acquisition cost</strong> is computed from your purchase history (portfolio
+        currency), using <strong>full cost per unit including fees</strong>:
+        <span class="valuation-formula">(quantity × unit_price × exchange_rate + fees) / quantity</span>; it does not
+        change when you sell.
+      </p>
+      <div class="valuation-toolbar">
+        <label class="date-field">
+          As-of date
+          <input v-model="valuationAsOfDate" type="date" />
+        </label>
+        <button type="button" class="btn btn-primary" :disabled="valuationSubmitting" @click="submitValuations">
+          Save valuations
+        </button>
+      </div>
+      <p v-if="valuationLoadError" class="valuation-error">{{ valuationLoadError }}</p>
+      <p v-else-if="!valuationRows.length" class="valuation-note">No active assets to value.</p>
+      <div v-else class="valuation-table-wrap">
+        <table class="valuation-table">
+          <thead>
+            <tr>
+              <th scope="col">asset_id</th>
+              <th scope="col">isin</th>
+              <th scope="col">asset_name</th>
+              <th scope="col">bank</th>
+              <th scope="col">avg. acquisition / unit</th>
+              <th scope="col">market unit price</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="a in valuationRows" :key="a.id">
+              <td><code>{{ a.asset_id }}</code></td>
+              <td>{{ a.isin ?? '—' }}</td>
+              <td>{{ a.asset_name }}</td>
+              <td>{{ a.broker ?? '—' }}</td>
+              <td class="num">{{ formatCost(a.current_average_unit_cost) }}</td>
+              <td>
+                <input
+                  v-model="marketPriceByAssetPk[a.id]"
+                  class="price-input"
+                  type="text"
+                  inputmode="decimal"
+                  autocomplete="off"
+                  placeholder="—"
+                  :aria-label="`Market unit price for ${a.asset_id}`"
+                />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <pre v-if="valuationMessage" class="import-result valuation-result">{{ valuationMessage }}</pre>
+    </section>
+
     <aside class="helper-panel" aria-labelledby="csv-columns-heading">
       <h3 id="csv-columns-heading">CSV column reference</h3>
       <p class="helper-note">
@@ -169,17 +226,73 @@
         * Required headers. You may omit optional columns entirely; for every <code>sell</code> row, include a
         <code>plus_minus</code> value (add that column to the header when you have sells).
       </p>
+
+      <h4 class="helper-sub">Mark-to-market snapshot</h4>
+      <p class="helper-note">
+        Use the form above to store one <strong>market unit price</strong> per active asset for a chosen
+        <strong>as-of date</strong>. The backend table is <code>investment_portfolio_market_quotes</code> (unique per
+        date and asset). The <strong>bank</strong> column shows each asset’s <code>broker</code> (custodian) from the
+        assets CSV. Purchase rows in <code>investment_portfolio_transactions</code> may include
+        <code>average_unit_cost_after_trade</code>: weighted average after each buy in portfolio currency, using per
+        purchase <strong>(quantity × unit_price × exchange_rate + fees) / quantity</strong> as the unit acquisition
+        price.
+      </p>
     </aside>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import { api } from '@/api/client';
+import type { InvestmentPortfolioAsset } from '@/types';
 
 const assetsFile = ref<File | null>(null);
 const txFile = ref<File | null>(null);
 const importMessage = ref('');
+
+const valuationRows = ref<InvestmentPortfolioAsset[]>([]);
+const valuationLoadError = ref('');
+const valuationAsOfDate = ref(isoToday());
+const marketPriceByAssetPk = reactive<Record<number, string>>({});
+const valuationMessage = ref('');
+const valuationSubmitting = ref(false);
+
+function isoToday(): string {
+  const d = new Date();
+  const z = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return z.toISOString().slice(0, 10);
+}
+
+function formatCost(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(n)) {
+    return '—';
+  }
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+}
+
+function parsePriceInput(s: string): number | null {
+  const t = s.trim().replace(',', '.');
+  if (t === '') {
+    return null;
+  }
+  const v = Number(t);
+  if (!Number.isFinite(v) || v < 0) {
+    return null;
+  }
+  return v;
+}
+
+onMounted(async () => {
+  try {
+    valuationLoadError.value = '';
+    valuationRows.value = await api.investmentPortfolioAssets.getAll({
+      status: 'active',
+      include_position: true,
+    });
+  } catch (e: unknown) {
+    valuationLoadError.value = e instanceof Error ? e.message : 'Failed to load assets';
+  }
+});
 
 function onAssetsFile(ev: Event) {
   const input = ev.target as HTMLInputElement;
@@ -210,6 +323,38 @@ async function uploadTxCsv() {
     importMessage.value = JSON.stringify(r, null, 2);
   } catch (e: unknown) {
     importMessage.value = e instanceof Error ? e.message : 'Upload failed';
+  }
+}
+
+async function submitValuations() {
+  valuationMessage.value = '';
+  if (!valuationAsOfDate.value) {
+    valuationMessage.value = 'Choose an as-of date.';
+    return;
+  }
+  const quotes: { asset_pk: number; market_unit_price: number }[] = [];
+  for (const a of valuationRows.value) {
+    const raw = marketPriceByAssetPk[a.id];
+    const v = parsePriceInput(raw ?? '');
+    if (v !== null) {
+      quotes.push({ asset_pk: a.id, market_unit_price: v });
+    }
+  }
+  if (!quotes.length) {
+    valuationMessage.value = 'Enter at least one market unit price.';
+    return;
+  }
+  valuationSubmitting.value = true;
+  try {
+    const r = await api.investmentPortfolioValuations.bulkUpsert({
+      as_of_date: valuationAsOfDate.value,
+      quotes,
+    });
+    valuationMessage.value = JSON.stringify(r, null, 2);
+  } catch (e: unknown) {
+    valuationMessage.value = e instanceof Error ? e.message : 'Save failed';
+  } finally {
+    valuationSubmitting.value = false;
   }
 }
 </script>
@@ -319,5 +464,87 @@ async function uploadTxCsv() {
   border-radius: 4px;
   overflow: auto;
   max-height: 320px;
+}
+.valuation-panel {
+  margin-top: 1.25rem;
+}
+.valuation-intro {
+  color: #555;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  margin: 0 0 1rem;
+}
+.valuation-intro .valuation-formula {
+  font-family: ui-monospace, monospace;
+  font-size: 0.84em;
+  white-space: nowrap;
+}
+.valuation-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9rem;
+}
+.valuation-error {
+  color: #b00020;
+  font-size: 0.9rem;
+  margin: 0 0 8px;
+}
+.valuation-note {
+  color: #666;
+  font-size: 0.9rem;
+  margin: 0;
+}
+.valuation-table-wrap {
+  overflow: auto;
+  max-height: 420px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+}
+.valuation-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.valuation-table th,
+.valuation-table td {
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid #eee;
+  vertical-align: middle;
+}
+.valuation-table thead th {
+  background: #f0f4f8;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.valuation-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.valuation-table .num {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.price-input {
+  width: 100%;
+  min-width: 7rem;
+  max-width: 12rem;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+.valuation-result {
+  margin-top: 12px;
+  max-height: 160px;
 }
 </style>
