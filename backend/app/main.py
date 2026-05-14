@@ -123,6 +123,7 @@ from .routers import (
     investment_assets,
     investment_transactions,
     investment_market_quotes,
+    investment_dashboard,
 )
 
 app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
@@ -135,3 +136,4 @@ app.include_router(raw_transactions.router, prefix="/api", tags=["raw-transactio
 app.include_router(investment_assets.router, prefix="/api/investment-assets", tags=["investment-assets"])
 app.include_router(investment_transactions.router, prefix="/api/investment-transactions", tags=["investment-transactions"])
 app.include_router(investment_market_quotes.router, prefix="/api/investment-portfolio-valuations", tags=["investment-portfolio-valuations"])
+app.include_router(investment_dashboard.router, prefix="/api/investment-dashboard", tags=["investment-dashboard"])

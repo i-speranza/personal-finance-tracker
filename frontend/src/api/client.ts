@@ -47,6 +47,7 @@ import type {
   InvestmentPortfolioImportResult,
   InvestmentPortfolioMarketQuotesBulk,
   InvestmentPortfolioMarketQuotesBulkResult,
+  InvestmentDashboardResponse,
 } from '@/types';
 
 const API_BASE_URL = import.meta.env.DEV ? '/api' : '/api';
@@ -81,10 +82,18 @@ async function request<T>(
     throw new ApiError(response.status, error.detail);
   }
 
-  // Handle empty responses
+  // DELETE and similar endpoints often return 204 with no body; parsing would throw.
+  if (response.status === 204 || response.status === 205) {
+    return {} as T;
+  }
+
   const contentType = response.headers.get('content-type');
   if (contentType && contentType.includes('application/json')) {
-    return response.json();
+    const text = await response.text();
+    if (!text.trim()) {
+      return {} as T;
+    }
+    return JSON.parse(text) as T;
   }
   return {} as T;
 }
@@ -556,6 +565,16 @@ export const investmentPortfolioValuationsApi = {
   },
 };
 
+export const investmentDashboardApi = {
+  get: (params?: { as_of_date?: string; unit_chart_asset_pk?: number }): Promise<InvestmentDashboardResponse> => {
+    const sp = new URLSearchParams();
+    if (params?.as_of_date) sp.set('as_of_date', params.as_of_date);
+    if (params?.unit_chart_asset_pk != null) sp.set('unit_chart_asset_pk', String(params.unit_chart_asset_pk));
+    const q = sp.toString();
+    return request<InvestmentDashboardResponse>(`/investment-dashboard${q ? `?${q}` : ''}`);
+  },
+};
+
 // Export all APIs
 export const api = {
   transactions: transactionsApi,
@@ -572,4 +591,5 @@ export const api = {
   investmentPortfolioAssets: investmentPortfolioAssetsApi,
   investmentPortfolioTransactions: investmentPortfolioTransactionsApi,
   investmentPortfolioValuations: investmentPortfolioValuationsApi,
+  investmentDashboard: investmentDashboardApi,
 };

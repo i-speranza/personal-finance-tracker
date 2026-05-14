@@ -282,13 +282,36 @@ function parsePriceInput(s: string): number | null {
   return v;
 }
 
+/** Mark-to-market table: bank (broker) first, then name, then asset_id. */
+function sortValuationAssets(rows: InvestmentPortfolioAsset[]): InvestmentPortfolioAsset[] {
+  return [...rows].sort((a, b) => {
+    const bankA = (a.broker ?? '').trim();
+    const bankB = (b.broker ?? '').trim();
+    const missA = bankA === '' ? 1 : 0;
+    const missB = bankB === '' ? 1 : 0;
+    if (missA !== missB) {
+      return missA - missB;
+    }
+    const byBank = bankA.localeCompare(bankB, undefined, { sensitivity: 'base' });
+    if (byBank !== 0) {
+      return byBank;
+    }
+    const byName = a.asset_name.localeCompare(b.asset_name, undefined, { sensitivity: 'base' });
+    if (byName !== 0) {
+      return byName;
+    }
+    return a.asset_id.localeCompare(b.asset_id, undefined, { sensitivity: 'base' });
+  });
+}
+
 onMounted(async () => {
   try {
     valuationLoadError.value = '';
-    valuationRows.value = await api.investmentPortfolioAssets.getAll({
+    const loaded = await api.investmentPortfolioAssets.getAll({
       status: 'active',
       include_position: true,
     });
+    valuationRows.value = sortValuationAssets(loaded);
   } catch (e: unknown) {
     valuationLoadError.value = e instanceof Error ? e.message : 'Failed to load assets';
   }

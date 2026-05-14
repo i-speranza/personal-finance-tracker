@@ -1,6 +1,6 @@
 """Pydantic schemas for request/response validation."""
 from pydantic import BaseModel, Field, ConfigDict, model_validator
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import date, datetime
 from enum import Enum
 
@@ -568,3 +568,88 @@ class InvestmentPortfolioMarketQuoteResponse(BaseModel):
     market_unit_price: float
     created_at: datetime
     updated_at: datetime
+
+
+# --- Investment portfolio dashboard (read-only aggregate) ---
+
+
+class InvestmentDashboardBrokerTotal(BaseModel):
+    broker: str
+    total_controvalore: float
+    total_controvalore_after_tax: float
+
+
+class InvestmentDashboardPositionRow(BaseModel):
+    asset_pk: int
+    asset_id: str
+    asset_name: str
+    broker: Optional[str] = None
+    shares: float
+    unit_valore_with_fees: Optional[float] = None
+    total_valore_with_fees: Optional[float] = None
+    unit_valore_no_fees: Optional[float] = None
+    total_valore_no_fees: Optional[float] = None
+    unit_controvalore: Optional[float] = None
+    total_controvalore: Optional[float] = None
+    total_controvalore_after_tax: Optional[float] = None
+    pct_gain_loss_real: Optional[float] = None
+    pct_gain_loss_no_fees: Optional[float] = None
+    irr: Optional[float] = None
+    has_quote: bool = False
+
+
+class InvestmentDashboardGeoAllocation(BaseModel):
+    valore_pct: Dict[str, float]
+    controvalore_pct: Dict[str, float]
+
+
+class InvestmentDashboardGeoByClassRow(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    asset_class: InvPortfolioClassSchema = Field(..., alias="class", serialization_alias="class")
+    valore_pct: Dict[str, float]
+    controvalore_pct: Dict[str, float]
+
+
+class InvestmentDashboardClassMixRow(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    asset_class: InvPortfolioClassSchema = Field(..., alias="class", serialization_alias="class")
+    valore_pct: float
+    controvalore_pct: float
+
+
+class InvestmentDashboardTimeseriesPoint(BaseModel):
+    date: date
+    total_valore_with_fees: float
+    total_controvalore: float
+
+
+class InvestmentDashboardUnitPoint(BaseModel):
+    date: date
+    unit_valore_with_fees: Optional[float] = None
+    unit_valore_no_fees: Optional[float] = None
+    unit_controvalore: float
+
+
+class InvestmentDashboardUnitAssetSeries(BaseModel):
+    asset_pk: int
+    asset_id: str
+    asset_name: str
+    points: List[InvestmentDashboardUnitPoint] = Field(default_factory=list)
+
+
+class InvestmentDashboardResponse(BaseModel):
+    as_of_date: Optional[date] = None
+    currency: str = "EUR"
+    totals_by_broker: List[InvestmentDashboardBrokerTotal] = Field(default_factory=list)
+    portfolio_irr: Optional[float] = None
+    positions: List[InvestmentDashboardPositionRow] = Field(default_factory=list)
+    geo_allocation: InvestmentDashboardGeoAllocation
+    geo_allocation_by_class: List[InvestmentDashboardGeoByClassRow] = Field(default_factory=list)
+    class_mix: List[InvestmentDashboardClassMixRow] = Field(default_factory=list)
+    timeseries: List[InvestmentDashboardTimeseriesPoint] = Field(default_factory=list)
+    unit_timeseries: List[InvestmentDashboardUnitPoint] = Field(default_factory=list)
+    unit_timeseries_by_asset: List[InvestmentDashboardUnitAssetSeries] = Field(default_factory=list)
+    unit_chart_asset_pk: Optional[int] = None
+    empty_detail: Optional[str] = None

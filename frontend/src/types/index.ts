@@ -487,3 +487,82 @@ export interface InvestmentPortfolioMarketQuotesBulkResult {
   upserted: number;
   errors: string[];
 }
+
+/** GET /api/investment-dashboard — snapshot + charts */
+export interface InvestmentDashboardBrokerTotal {
+  broker: string;
+  total_controvalore: number;
+  total_controvalore_after_tax: number;
+}
+
+export interface InvestmentDashboardPositionRow {
+  asset_pk: number;
+  asset_id: string;
+  asset_name: string;
+  broker: string | null;
+  shares: number;
+  unit_valore_with_fees: number | null;
+  total_valore_with_fees: number | null;
+  unit_valore_no_fees: number | null;
+  total_valore_no_fees: number | null;
+  unit_controvalore: number | null;
+  total_controvalore: number | null;
+  total_controvalore_after_tax: number | null;
+  pct_gain_loss_real: number | null;
+  pct_gain_loss_no_fees: number | null;
+  irr: number | null;
+  has_quote: boolean;
+}
+
+export interface InvestmentDashboardGeoAllocation {
+  valore_pct: Record<string, number>;
+  controvalore_pct: Record<string, number>;
+}
+
+export interface InvestmentDashboardGeoByClassRow {
+  class: InvPortfolioClass;
+  valore_pct: Record<string, number>;
+  controvalore_pct: Record<string, number>;
+}
+
+export interface InvestmentDashboardClassMixRow {
+  class: InvPortfolioClass;
+  valore_pct: number;
+  controvalore_pct: number;
+}
+
+export interface InvestmentDashboardTimeseriesPoint {
+  date: string;
+  total_valore_with_fees: number;
+  total_controvalore: number;
+}
+
+export interface InvestmentDashboardUnitPoint {
+  date: string;
+  unit_valore_with_fees: number | null;
+  unit_valore_no_fees: number | null;
+  unit_controvalore: number;
+}
+
+export interface InvestmentDashboardUnitAssetSeries {
+  asset_pk: number;
+  asset_id: string;
+  asset_name: string;
+  points: InvestmentDashboardUnitPoint[];
+}
+
+export interface InvestmentDashboardResponse {
+  as_of_date: string | null;
+  currency: string;
+  totals_by_broker: InvestmentDashboardBrokerTotal[];
+  portfolio_irr: number | null;
+  positions: InvestmentDashboardPositionRow[];
+  geo_allocation: InvestmentDashboardGeoAllocation;
+  geo_allocation_by_class: InvestmentDashboardGeoByClassRow[];
+  class_mix: InvestmentDashboardClassMixRow[];
+  timeseries: InvestmentDashboardTimeseriesPoint[];
+  unit_timeseries: InvestmentDashboardUnitPoint[];
+  unit_timeseries_by_asset: InvestmentDashboardUnitAssetSeries[];
+  unit_chart_asset_pk: number | null;
+  empty_detail: string | null;
+}
